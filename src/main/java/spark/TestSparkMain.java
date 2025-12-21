@@ -6,12 +6,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import scala.Tuple2;
-
 import java.util.*;
-
-import static org.spark_project.guava.primitives.Doubles.max;
-import static org.spark_project.guava.primitives.Doubles.min;
-
 public class TestSparkMain {
     static long neighborQueryTimeNs = 0;
     static long neighborQueryCount = 0;
@@ -22,7 +17,7 @@ public class TestSparkMain {
 
         SparkConf conf = new SparkConf().setAppName("DBSCAN Analysis").setMaster("local[*]");
         JavaSparkContext sc = new JavaSparkContext(conf);
-        JavaRDD<String> lines = sc.textFile("src/main/resources/densired_2_shrink.csv");
+        JavaRDD<String> lines = sc.textFile("src/main/resources/densired_2.csv");
         //JavaRDD<String> lines = sc.textFile("src/main/resources/test.txt");
         JavaRDD<String> nonEmptyLines=lines.filter(s -> !s.trim().isEmpty());
         JavaRDD<Point> points = nonEmptyLines
@@ -35,13 +30,11 @@ public class TestSparkMain {
         double minLongitude = points.map(p -> p.longitude).reduce(Double::min);
         double maxLongitude = points.map(p -> p.longitude).reduce(Double::max);
         System.out.println("minLatitude: " + minLatitude+" maxLatitude: " + maxLatitude +" minLongitude: " + minLongitude +" maxLongitude: " + maxLongitude);
-        double cellSize = 3 * eps; // Paper uses 3Eps
-        // Calculate number of cells in X and Y directions
+        double cellSize = 3 * eps;
 
         TestSparkMain.numCellsX = (int) Math.ceil((maxLatitude - minLatitude) / cellSize);
         TestSparkMain.numCellsY = (int) Math.ceil((maxLongitude - minLongitude) / cellSize);
 
-        // For each point, get all cells it belongs to (including expanded cells)
         JavaPairRDD<Integer, Point> expandedAssignments = points.flatMapToPair(
                 point -> {
                     List<Integer> cellIds = getExpandedCellIds(point, eps, minLatitude, minLongitude,
@@ -59,9 +52,7 @@ public class TestSparkMain {
                                 minLatitude, minLongitude,
                                 cellSize, eps
                         );
-
                         assignments.add(new Tuple2<>(cellId, copy));
-
                     }
                     return assignments.iterator();
                 }
@@ -69,26 +60,21 @@ public class TestSparkMain {
         JavaPairRDD<Integer, Iterable<Point>> partitions =
                 expandedAssignments.groupByKey();
 
-
         JavaRDD<Point> clustered =
                 partitions.flatMap(cell -> {
 
                     List<Point> cellPoints = new ArrayList<>();
                     cell._2.forEach(cellPoints::add);
-
                     // run DBSCAN ONLY on this cell
                     List<Point> clusteredCell =
                             localDBSCAN(cellPoints, eps, minPts);
-
                     return clusteredCell.iterator();
                 });
-
 
         JavaPairRDD<String, Iterable<Point>> groupedByPoint =
                 clustered.mapToPair(p ->
                         new Tuple2<>(p.latitude + "," + p.longitude, p)
                 ).groupByKey();
-
 
         JavaPairRDD<String, String> mergePairs =
                 groupedByPoint.flatMapToPair(entry -> {
@@ -114,9 +100,10 @@ public class TestSparkMain {
                 });
         List<Tuple2<String, String>> mergeList = mergePairs.collect();
 
+
         UnionFindString uf = new UnionFindString();
-        for (Tuple2<String, String> pair : mergeList) {
-            uf.union(pair._1, pair._2);
+        for (Tuple2<String, String> e : mergeList) {
+            uf.union(e._1, e._2);
         }
 
         Map<String, String> keyToRep = new HashMap<>();
@@ -127,84 +114,56 @@ public class TestSparkMain {
         // Add isolated clusters (never merged)
         for (Point p : clustered.collect()) {
             if (p.clusterId > 0) {
-                String key = p.cellId + "_" + p.clusterId;
-                if (!keyToRep.containsKey(key)) {
-                    keyToRep.put(key, key);
+                String k = clusterKey(p);
+                if (!keyToRep.containsKey(k)) {
+                    keyToRep.putIfAbsent(k, k);
                 }
             }
         }
 
-        Broadcast<Map<String, String>> bcKeyToRep = sc.broadcast(keyToRep);
-
 
         Map<String, Integer> repToGlobalId = new HashMap<>();
-        int next = 1;
+        int nextId = 1;
         for (String rep : new HashSet<>(keyToRep.values())) {
-            repToGlobalId.put(rep, next++);
+            repToGlobalId.put(rep, nextId++);
         }
 
-        Broadcast<Map<String, Integer>> bcRepToGlobalId = sc.broadcast(repToGlobalId);
-
+        Broadcast<Map<String, String>> bcKeyToRep = sc.broadcast(keyToRep);
+        Broadcast<Map<String, Integer>> bcRepToId = sc.broadcast(repToGlobalId);
 
         JavaRDD<Point> finalClusters =
                 clustered.map(p -> {
                     if (p.clusterId > 0) {
-                        String key = p.cellId + "_" + p.clusterId;
-
-                        String rep = bcKeyToRep.value().getOrDefault(key, key);
-
-                        int gid = bcRepToGlobalId.value().getOrDefault(rep, 0);
-
-                        p.clusterId = gid;
+                        String key = clusterKey(p);
+                        String rep = bcKeyToRep.value().get(key);
+                        p.clusterId = bcRepToId.value().get(rep);
                     }
                     return p;
                 });
 
 
-        JavaRDD<Point> output = finalClusters.filter(p -> p.isLocalRegion);
 
         finalClusters.foreach(p -> {System.out.println(p.latitude + "," + p.longitude + ", " + p.clusterId);});
-        finalClusters.map(Point::toString).coalesce(1).saveAsTextFile("output/dbscan_result_single");
+        JavaRDD<Point> finalOutput = finalClusters.filter(p -> p.isLocalRegion);
 
-        long localCount =
-                clustered.filter(p -> p.isLocalRegion).count();
+        finalOutput.map(Point::toString).coalesce(1).saveAsTextFile("output/dbscan_result_single");
 
-        long boundaryCount =
-                clustered.filter(p -> !p.isLocalRegion).count();
+        long localCount = clustered.filter(p -> p.isLocalRegion).count();
+
+        long boundaryCount = clustered.filter(p -> !p.isLocalRegion).count();
 
         System.out.println("Local: " + localCount);
         System.out.println("Boundary: " + boundaryCount);
-
-
-
-
-        //expandedAssignments.collect().forEach(System.out::println);
-
-        //Without any partition call local DBSCAN
-//        JavaPairRDD<Point,Integer> initialClusters=points.mapToPair(point->new Tuple2<>(point,0));
-//        JavaRDD<Point> clustered = points.mapPartitions(iter -> {
-//            List<Point> localPoints = new ArrayList<>();
-//            iter.forEachRemaining(localPoints::add);
-//
-//            List<Point> result = localDBSCAN(
-//                    localPoints,
-//                    eps ,
-//                    minPts
-//            );
-//
-//            return result.iterator();
-//        });
 
         long t0 = System.nanoTime();
         List<Point> result = clustered.collect();
         long t1 = System.nanoTime();
 
+        // No new cores after merge
+
+        System.out.println("Assert final Cluster: " + finalClusters.filter(p -> p.isCorePoint && p.clusterId > 0).count());
+        System.out.println("Clustered Filter: " + clustered.filter(p -> p.isCorePoint && p.clusterId > 0).count());
         System.out.println("Collected size: " + result.size());
-        //JavaRDD<String> output = clustered.map(Point::toString);
-        //output.saveAsTextFile("output/dbscan_result");
-
-        //clustered.map(Point::toString).coalesce(1).saveAsTextFile("output/dbscan_result_single");
-
         System.out.println("DBSCAN time: " + (t1 - t0)/1e9);
         System.out.println("Neighbor queries: " + neighborQueryCount);
         System.out.println("Total neighbor query time (s): " + neighborQueryTimeNs / 1e9);
@@ -371,6 +330,11 @@ public class TestSparkMain {
 
         return neighbors;
     }
+
+    static String clusterKey(Point p) {
+        return p.cellId + "_" + p.clusterId;
+    }
+
 
 
     static class UnionFindString {
