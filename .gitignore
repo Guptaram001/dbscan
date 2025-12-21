@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+*.iws
+
+# Eclipse (if any)
+.classpath
+.project
+.settings/
+
+# VS Code (if any)
+.vscode/
+
+# Maven
+target/
+log/
+
+# Gradle
+.gradle/
+build/
+
+# Java / compiled
+*.class
+*.log
+
+# Local run / temp
+*.tmp
+*.swp
+*.swo
+
+# Spark local artifacts (if you generate any)
+checkpoint/
+metastore_db/
+derby.log
+spark-warehouse/
+src/main/resources/
+
