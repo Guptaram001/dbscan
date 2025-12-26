@@ -8,8 +8,8 @@ public class ClusteredPoint implements Serializable {
     boolean isCorePoint;
     boolean isLocalRegion;
 
-    ClusteredPoint(double x,double y,int clusterId, boolean isCorePoint, boolean isLocalRegion) {
-        this.point=new Point(x,y,clusterId);
+    ClusteredPoint(double id,double x,double y,int clusterId, boolean isCorePoint, boolean isLocalRegion) {
+        this.point=new Point(id,x,y,clusterId);
         this.localClusterId = clusterId;
         this.isCorePoint = isCorePoint;
         this.isLocalRegion = isLocalRegion;

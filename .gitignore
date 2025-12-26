@@ -38,3 +38,4 @@ derby.log
 spark-warehouse/
 src/main/resources/
 
+output/
