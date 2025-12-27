@@ -35,18 +35,5 @@ public class Point implements Serializable {
         return "(" + id +  ", " + latitude + ", " + longitude + ", " + clusterId + ", " + isLocalRegion + ", "+isCorePoint+" ,"+cellId + " )" ;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Point)) return false;
-        Point p = (Point) o;
-        return Double.compare(p.latitude, latitude) == 0 &&
-                Double.compare(p.longitude, longitude) == 0;
-    }
-
-    @Override
-    public int hashCode() {
-        return java.util.Objects.hash(latitude, longitude);
-    }
 
 }
