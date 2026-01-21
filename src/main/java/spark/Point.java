@@ -29,10 +29,16 @@ public class Point implements Serializable {
     public int getCellId() { return cellId; }
     public void setCellId(int cellId) { this.cellId = cellId; }
     public int getglobalClusterId() { return globalClusterId; }
+    //public double getId() { return id; }
+
+//    @Override
+//    public String toString() {
+//        return "(id:" + id +  ", Lat:" + latitude + ", Long:" + longitude + ", CId:" + clusterId + ", IsLocal:" + isLocalRegion + ", IsCore:"+isCorePoint+", HomeCell: "+cellId + " )" ;
+//    }
 
     @Override
     public String toString() {
-        return "(" + id +  ", " + latitude + ", " + longitude + ", " + clusterId + ", " + isLocalRegion + ", "+isCorePoint+" ,"+cellId + " )" ;
+        return "(" + id +  ", " + latitude + ", " + longitude + ", " + clusterId + ", " + isLocalRegion + ", "+isCorePoint+", "+cellId + " )" ;
     }
 
 
