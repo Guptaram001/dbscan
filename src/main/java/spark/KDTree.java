@@ -1,0 +1,103 @@
+package spark;
+
+import org.apache.spark.util.LongAccumulator;
+
+import java.util.*;
+
+public class KDTree {
+    static class Node {
+        Point point;
+        Node left, right;
+        int dimension;
+
+        Node(Point p, int dimension) {
+            this.point = p;
+            this.dimension = dimension;
+            this.left = this.right = null;
+        }
+    }
+
+    private final Node root;
+
+    public KDTree(List<Point> points) {
+        this.root = build(new ArrayList<>(points), 0);
+    }
+
+    private Node build(List<Point> pts, int depth) {
+        if (pts.isEmpty()) return null;
+        int dimension = depth % 2;
+        pts.sort(Comparator.comparingDouble(p -> dimension == 0 ? p.latitude : p.longitude));
+        int mid = pts.size() / 2;
+
+        Node node = new Node(pts.get(mid), dimension);
+        //System.out.println(node.point+" "+node.dimension);
+        node.left  = build(pts.subList(0, mid), depth + 1);
+        node.right = build(pts.subList(mid + 1, pts.size()), depth + 1);
+        return node;
+    }
+
+    public List<Point> radiusSearch(Point target, double eps, LongAccumulator queryCount, LongAccumulator queryTime) {
+        long start = System.nanoTime();
+
+        List<Point> neighbours = new ArrayList<>();
+        radiusSearch(root, target, eps, neighbours);
+
+        long end = System.nanoTime();
+        queryTime.add(end - start);
+        queryCount.add(1);
+
+        return neighbours;
+    }
+
+    private void radiusSearch(Node node, Point t, double eps, List<Point> neighbours) {
+        if (node == null) return;
+        double eps2=eps * eps;
+        if (distance(node.point, t) <= eps2) neighbours.add(node.point);
+
+        int axis = node.dimension;
+        double diff = (axis == 0 ? t.latitude - node.point.latitude : t.longitude - node.point.longitude);
+
+        Node near = diff <= 0 ? node.left : node.right;
+        Node far  = diff <= 0 ? node.right : node.left;
+
+        radiusSearch(near, t, eps,  neighbours);
+
+        if (diff * diff <= eps2) {
+            radiusSearch(far, t, eps, neighbours);
+        }
+    }
+
+    private double distance(Point a, Point b) {
+        double dx = a.latitude - b.latitude;
+        double dy = a.longitude - b.longitude;
+        return dx*dx + dy*dy;
+    }
+
+    public static void main(String[] args) {
+
+        List<Point> points = List.of(
+                new Point(0,2, 3,0),
+                new Point(0,5, 4,0),
+                new Point(0,9, 6,0),
+                new Point(0,4, 7,0),
+                new Point(0,8, 1,0),
+                new Point(0,7, 2,0)
+        );
+
+        KDTree tree = new KDTree(points);
+
+        Point query = new Point(0,5, 5,0);
+        double eps = 3.0;
+
+        List<Point> neighbors = tree.radiusSearch(query, eps, null, null);
+
+        System.out.println("Query point: " + query);
+        System.out.println("Radius eps = " + eps);
+        System.out.println("Neighbors:");
+
+        for (Point p : neighbors) {
+            System.out.println("  " + p);
+        }
+    }
+}
+

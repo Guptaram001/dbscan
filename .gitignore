@@ -39,5 +39,6 @@ spark-warehouse/
 src/main/resources/
 
 output/
+results/
 
 spark-cluster/shared/
