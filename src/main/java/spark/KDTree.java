@@ -26,7 +26,7 @@ public class KDTree {
     private Node build(List<Point> pts, int depth) {
         if (pts.isEmpty()) return null;
         int dimension = depth % 2;
-        pts.sort(Comparator.comparingDouble(p -> dimension == 0 ? p.latitude : p.longitude));
+        pts.sort(Comparator.comparing(p -> dimension == 0 ? p.latitude : p.longitude, Float::compare));
         int mid = pts.size() / 2;
 
         Node node = new Node(pts.get(mid), dimension);
@@ -36,11 +36,11 @@ public class KDTree {
         return node;
     }
 
-    public List<Point> radiusSearch(Point target, double eps, LongAccumulator queryCount, LongAccumulator queryTime) {
+    public List<Point> radiusSearch(Point target, float eps2, LongAccumulator queryCount, LongAccumulator queryTime) {
         long start = System.nanoTime();
 
         List<Point> neighbours = new ArrayList<>();
-        radiusSearch(root, target, eps, neighbours);
+        radiusSearch(root, target, eps2, neighbours);
 
         long end = System.nanoTime();
         queryTime.add(end - start);
@@ -49,27 +49,27 @@ public class KDTree {
         return neighbours;
     }
 
-    private void radiusSearch(Node node, Point t, double eps, List<Point> neighbours) {
+    private void radiusSearch(Node node, Point t, float eps2, List<Point> neighbours) {
         if (node == null) return;
-        double eps2=eps * eps;
         if (distance(node.point, t) <= eps2) neighbours.add(node.point);
 
         int axis = node.dimension;
-        double diff = (axis == 0 ? t.latitude - node.point.latitude : t.longitude - node.point.longitude);
+        float diff = (axis == 0 ? t.latitude - node.point.latitude : t.longitude - node.point.longitude);
 
         Node near = diff <= 0 ? node.left : node.right;
         Node far  = diff <= 0 ? node.right : node.left;
 
-        radiusSearch(near, t, eps,  neighbours);
+        radiusSearch(near, t, eps2,  neighbours);
 
         if (diff * diff <= eps2) {
-            radiusSearch(far, t, eps, neighbours);
+            radiusSearch(far, t, eps2, neighbours);
         }
     }
+    
 
-    private double distance(Point a, Point b) {
-        double dx = a.latitude - b.latitude;
-        double dy = a.longitude - b.longitude;
+    private float distance(Point a, Point b) {
+        float dx = a.latitude - b.latitude;
+        float dy = a.longitude - b.longitude;
         return dx*dx + dy*dy;
     }
 
@@ -87,7 +87,7 @@ public class KDTree {
         KDTree tree = new KDTree(points);
 
         Point query = new Point(0,5, 5,0);
-        double eps = 3.0;
+        float eps = 3.0f;
 
         List<Point> neighbors = tree.radiusSearch(query, eps, null, null);
 

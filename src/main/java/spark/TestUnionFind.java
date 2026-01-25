@@ -26,6 +26,7 @@ public class TestUnionFind {
         LongAccumulator neighborQueryTimeNs = sc.sc().longAccumulator("neighborQueryTimeNs");
         LongAccumulator ghostPoints=sc.sc().longAccumulator("ghostPoints");
         long startTime = System.currentTimeMillis();
+        float eps2=eps*eps;
 
 
         //Reads from the file and associates each with a long index as Point(index, lat, long, clusterid =0)
@@ -136,7 +137,7 @@ public class TestUnionFind {
                             List<Point> cellPoints = new ArrayList<>();
                             cell._2.forEach(cellPoints::add);
 
-                            localDBSCAN(cellPoints, eps, minPts, neighborQueryCount, neighborQueryTimeNs);
+                            Utils.localDBSCAN(cellPoints, eps2, minPts, neighborQueryCount, neighborQueryTimeNs);
 
                             List<Tuple2<Integer, Point>> out = new ArrayList<>();
                             for (Point p : cellPoints) {
@@ -149,7 +150,7 @@ public class TestUnionFind {
         dbscanClusteredAsPerCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
 
 
-        JavaPairRDD<Float, Iterable<Point>> groupedByPoint =
+        JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
                 dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
                         .groupByKey();
         System.out.println("Grouped by points by after local DBSCAN executed on each cells to initiate merge ie Same point in multiple cells");
@@ -174,8 +175,8 @@ public class TestUnionFind {
                             if (!(a.isCorePoint || b.isCorePoint))
                                 continue;
 
-                            float dist = distance(a, b);
-                            if (dist <= eps*eps) {
+                            float dist = Utils.distance(a, b);
+                            if (dist <= eps2) {
                                 String keyA = a.cellId + "_" + a.clusterId;
                                 String keyB = b.cellId + "_" + b.clusterId;
                                 if (!keyA.equals(keyB))
@@ -282,7 +283,7 @@ public class TestUnionFind {
 
         Broadcast<Map<String, Integer>> bcMapToGlobalId = sc.broadcast(edgesToGlobal);
 
-        JavaPairRDD<Float, Integer> pointToGlobalId =
+        JavaPairRDD<Long, Integer> pointToGlobalId =
                 groupedByPoint.mapValues(pts -> {
 
                     boolean hasCore = false;
@@ -320,7 +321,7 @@ public class TestUnionFind {
         System.out.println("pointToGlobalId result"+pointToGlobalId.collect().size());
         pointToGlobalId.take(50).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
 
-        JavaPairRDD<Float, Point> idPointPairRDD = dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2));
+        JavaPairRDD<Long, Point> idPointPairRDD = dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2));
         System.out.println("idPointPairRDD result"+idPointPairRDD.collect().size());
         idPointPairRDD.take(50).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
 
@@ -361,8 +362,6 @@ public class TestUnionFind {
         sc.close();
     }
 
-
-
     private static void addGhost(List<Tuple2<Integer, Point>> list, Point original, int targetCellId,LongAccumulator ghostPoints) {
         Point ghost = new Point(original.id, original.latitude, original.longitude, 0);
         ghost.cellId = targetCellId;
@@ -370,88 +369,6 @@ public class TestUnionFind {
         list.add(new Tuple2<>(targetCellId, ghost));
         ghostPoints.add(1);
     }
-
-
-
-    public static float distance(Point a, Point b) {
-        float dx = a.latitude - b.latitude;
-        float dy = a.longitude - b.longitude;
-        return dx * dx + dy * dy;
-    }
-
-
-    public static void localDBSCAN(List<Point> points, float eps, int minPts,LongAccumulator queryCount, LongAccumulator queryTime) {
-
-        Map<Float, Boolean> visited = new HashMap<>();
-        int localClusterId = 0;
-
-        for (Point p : points) {
-            if (visited.getOrDefault(p.id, false)) {
-                continue;
-            }
-
-            visited.put(p.id, true);
-            //List<Point> neighbors = regionQuery(points, p, eps, queryCount, queryTime);
-            KDTree kdTree=new KDTree(points);
-
-            List<Point> neighbors =kdTree.radiusSearch(p,eps,queryCount,queryTime);
-
-            if (neighbors.size() < minPts) {
-                p.clusterId = -1;
-                p.isCorePoint = false;
-            } else {
-                p.isCorePoint = true;
-                localClusterId++;
-                expandCluster(kdTree, p, neighbors, localClusterId, eps, minPts, visited, queryCount, queryTime);
-            }
-        }
-    }
-
-    public static void expandCluster(KDTree kdTree, Point p, List<Point> neighbors,
-                                     int clusterId, float eps, int minPts, Map<Float, Boolean> visited,
-                                     LongAccumulator queryCount, LongAccumulator queryTime) {
-        p.clusterId = clusterId;
-
-        Queue<Point> seeds = new LinkedList<>(neighbors);
-
-        while (!seeds.isEmpty()) {
-            Point q = seeds.poll();
-
-            if (!visited.getOrDefault(q.id, false)) {
-                visited.put(q.id, true);
-                //List<Point> qNeighbors = regionQuery(points, q, eps, queryCount, queryTime);
-
-                List<Point> qNeighbors =kdTree.radiusSearch(q,eps,queryCount,queryTime);
-                if (qNeighbors.size() >= minPts) {
-                    q.isCorePoint = true;
-                    seeds.addAll(qNeighbors);
-                }
-            }
-
-            if (q.clusterId <= 0) {
-                q.clusterId = clusterId;
-            }
-        }
-    }
-
-
-    public static List<Point> regionQuery(List<Point> points, Point p, float eps, LongAccumulator queryCount, LongAccumulator queryTime) {
-        long start = System.nanoTime();
-
-        List<Point> neighbors = new ArrayList<>();
-        for (Point q : points) {
-            if (distance(p, q) <= eps *eps) {
-                neighbors.add(q);
-            }
-        }
-
-        long end = System.nanoTime();
-        queryTime.add(end - start);
-        queryCount.add(1);
-
-        return neighbors;
-    }
-
 }
 
 

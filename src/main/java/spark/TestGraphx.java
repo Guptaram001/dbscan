@@ -26,6 +26,7 @@ public class TestGraphx {
                 .setAppName("DBSCAN Analysis");
         JavaSparkContext sc = new JavaSparkContext(conf);
         String inputPath = args.length >=1? args[0]: "src/main/resources/densired_2.csv";
+        float eps2=eps*eps;
         //JavaRDD<String> rawLines = sc.textFile(args[0]);
 
 //        SparkConf conf = new SparkConf().setAppName("DBSCAN Analysis");
@@ -151,7 +152,7 @@ public class TestGraphx {
                             List<Point> cellPoints = new ArrayList<>();
                             cell._2.forEach(cellPoints::add);
 
-                            localDBSCAN(cellPoints, eps, minPts, neighborQueryCount, neighborQueryTimeNs);
+                            Utils.localDBSCAN(cellPoints, eps2, minPts, neighborQueryCount, neighborQueryTimeNs);
 
 
                             List<Tuple2<Integer, Point>> out = new ArrayList<>();
@@ -169,7 +170,7 @@ public class TestGraphx {
         }
 
 
-        JavaPairRDD<Float, Iterable<Point>> groupedByPoint =
+        JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
                 dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
                         .groupByKey();
         if (DEBUG)
@@ -197,8 +198,8 @@ public class TestGraphx {
                             if (!(a.isCorePoint || b.isCorePoint))
                                 continue;
 
-                            float dist = distance(a, b);
-                            if (dist <= eps*eps) {
+                            float dist = Utils.distance(a, b);
+                            if (dist <= eps2) {
                                 String keyA = a.cellId + "_" + a.clusterId;
                                 String keyB = b.cellId + "_" + b.clusterId;
                                 if (!keyA.equals(keyB))
@@ -357,7 +358,7 @@ public class TestGraphx {
 
 
         // Assign global cluster IDs to points
-        JavaPairRDD<Float, String> pointToLocalKey = groupedByPoint.mapValues(pts -> {
+        JavaPairRDD<Long, String> pointToLocalKey = groupedByPoint.mapValues(pts -> {
             String coreKey = null;
             String borderKey = null;
 
@@ -380,7 +381,7 @@ public class TestGraphx {
         }
 
 
-        JavaPairRDD<Float, Integer> pointToGlobal = pointToLocalKey
+        JavaPairRDD<Long, Integer> pointToGlobal = pointToLocalKey
                 .filter(t -> t._2 != null)
                 .mapToPair(t -> new Tuple2<>(t._2, t._1))
                 .join(localToGlobal)
@@ -389,12 +390,12 @@ public class TestGraphx {
         //if (DEBUG) pointToGlobal.take(50).forEach(pair ->  System.out.println("pointtoglobal Map: "+pair._1() + ": " + pair._2()));
 
 
-        JavaPairRDD<Float, Integer> pointToGlobalUnique =
+        JavaPairRDD<Long, Integer> pointToGlobalUnique =
                 pointToGlobal
                         .reduceByKey((a, b) -> a); // same globalId anyway
 
         // Final output
-        JavaPairRDD<Float, Point> localOnly = dbscanClusteredAsPerCellsRDD
+        JavaPairRDD<Long, Point> localOnly = dbscanClusteredAsPerCellsRDD
                 .filter(t -> t._2.isLocalRegion)
                 .mapToPair(t -> new Tuple2<>(t._2.id, t._2));
 
@@ -428,88 +429,6 @@ public class TestGraphx {
         list.add(new Tuple2<>(targetCellId, ghost));
         ghostPoints.add(1);
     }
-
-
-
-    public static float distance(Point a, Point b) {
-        float dx = a.latitude - b.latitude;
-        float dy = a.longitude - b.longitude;
-        return dx * dx + dy * dy;
-    }
-
-
-    public static void localDBSCAN(List<Point> points, float eps, int minPts,LongAccumulator queryCount, LongAccumulator queryTime) {
-
-        Map<Float, Boolean> visited = new HashMap<>();
-        int localClusterId = 0;
-
-        for (Point p : points) {
-            if (visited.getOrDefault(p.id, false)) {
-                continue;
-            }
-
-            visited.put(p.id, true);
-            //List<Point> neighbors = regionQuery(points, p, eps, queryCount, queryTime);
-            KDTree kdTree=new KDTree(points);
-            List<Point> neighbors = kdTree.radiusSearch(p,eps,queryCount,queryTime);
-
-            if (neighbors.size() < minPts) {
-                p.clusterId = -1;
-                p.isCorePoint = false;
-            } else {
-                p.isCorePoint = true;
-                localClusterId++;
-                expandCluster(kdTree, p, neighbors, localClusterId, eps, minPts, visited, queryCount, queryTime);
-            }
-        }
-    }
-
-    public static void expandCluster(KDTree kdTree, Point p, List<Point> neighbors,
-                                     int clusterId, float eps, int minPts, Map<Float, Boolean> visited,
-                                     LongAccumulator queryCount, LongAccumulator queryTime) {
-        p.clusterId = clusterId;
-
-        Queue<Point> seeds = new LinkedList<>(neighbors);
-
-        while (!seeds.isEmpty()) {
-            Point q = seeds.poll();
-
-            if (!visited.getOrDefault(q.id, false)) {
-                visited.put(q.id, true);
-                //List<Point> qNeighbors = regionQuery(points, q, eps, queryCount, queryTime);
-
-                List<Point> qNeighbors = kdTree.radiusSearch(q,eps,queryCount,queryTime);
-
-                if (qNeighbors.size() >= minPts) {
-                    q.isCorePoint = true;
-                    seeds.addAll(qNeighbors);
-                }
-            }
-
-            if (q.clusterId <= 0) {
-                q.clusterId = clusterId;
-            }
-        }
-    }
-
-
-    public static List<Point> regionQuery(List<Point> points, Point p, float eps, LongAccumulator queryCount, LongAccumulator queryTime) {
-        long start = System.nanoTime();
-
-        List<Point> neighbors = new ArrayList<>();
-        for (Point q : points) {
-            if (distance(p, q) <= eps*eps) {
-                neighbors.add(q);
-            }
-        }
-
-        long end = System.nanoTime();
-        queryTime.add(end - start);
-        queryCount.add(1);
-
-        return neighbors;
-    }
-
 }
 
 

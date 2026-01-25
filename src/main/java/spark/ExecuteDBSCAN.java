@@ -10,6 +10,7 @@ import scala.Tuple2;
 import java.util.*;
 
 public class ExecuteDBSCAN {
+    //Parallel DBSCAN
     public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener) {
 
         Result result = new Result();
@@ -18,6 +19,7 @@ public class ExecuteDBSCAN {
         result.cellFactor=executionConfiguration.cellFactor;
         result.bufferFactor=executionConfiguration.bufferFactor;
         result.mergeStrategy=executionConfiguration.mergeStrategy;
+        float eps2=result.eps*result.eps;
 
         String inputPath = executionConfiguration.inputPath;
 
@@ -27,6 +29,7 @@ public class ExecuteDBSCAN {
         long startTime = System.currentTimeMillis();
 
         //Reads from the file and associates each with a long index as Point(index, lat, long, clusterid =0)
+        long readStart = System.currentTimeMillis();
         JavaRDD<Point> points = sc.textFile(inputPath)
                 .zipWithIndex()
                 .filter(t -> !t._1.trim().isEmpty())
@@ -35,9 +38,9 @@ public class ExecuteDBSCAN {
                     float x = Float.parseFloat(parts[0]);
                     float y = Float.parseFloat(parts[1]);
                     return new Point(t._2, x, y, 0);
-                })
-                .cache();
-        points.take(20).forEach(point ->System.out.println(point));
+                });
+        points.count();
+        long readEnd = System.currentTimeMillis();
 
 
         long totalPoints = points.count();
@@ -134,7 +137,7 @@ public class ExecuteDBSCAN {
                             List<Point> cellPoints = new ArrayList<>();
                             cell._2.forEach(cellPoints::add);
 
-                            localDBSCAN(cellPoints, result.eps, result.minPts, neighborQueryCount, neighborQueryTimeNs);
+                            Utils.localDBSCAN(cellPoints, eps2, result.minPts, neighborQueryCount, neighborQueryTimeNs);
 
                             List<Tuple2<Integer, Point>> out = new ArrayList<>();
                             for (Point p : cellPoints) {
@@ -147,7 +150,7 @@ public class ExecuteDBSCAN {
         dbscanClusteredAsPerCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
 
 
-        JavaPairRDD<Float, Iterable<Point>> groupedByPoint =
+        JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
                 dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
                         .groupByKey();
         System.out.println("Grouped by points by after local DBSCAN executed on each cells to initiate merge ie Same point in multiple cells");
@@ -172,8 +175,8 @@ public class ExecuteDBSCAN {
                             if (!(a.isCorePoint || b.isCorePoint))
                                 continue;
 
-                            float dist = distance(a, b);
-                            if (dist <= result.eps *result.eps ) {
+                            float dist = Utils.distance(a, b);
+                            if (dist <= eps2 ) {
                                 String keyA = a.cellId + "_" + a.clusterId;
                                 String keyB = b.cellId + "_" + b.clusterId;
                                 if (!keyA.equals(keyB))
@@ -198,7 +201,7 @@ public class ExecuteDBSCAN {
         }
 
         Broadcast<Map<String, Integer>> bcMapToGlobalId = sc.broadcast(localToGlobal);
-        JavaPairRDD<Float, Integer> pointToGlobalId =
+        JavaPairRDD<Long, Integer> pointToGlobalId =
                 groupedByPoint.mapValues(pts -> {
 
                     Integer coreGid = null;
@@ -219,8 +222,7 @@ public class ExecuteDBSCAN {
                     return -1;
                 });
 
-
-        JavaPairRDD<Float, Point> idPointPairRDD =
+        JavaPairRDD<Long, Point> idPointPairRDD =
                 dbscanClusteredAsPerCellsRDD
                         .mapToPair(p -> new Tuple2<>(p._2.id, p._2));
 
@@ -233,22 +235,36 @@ public class ExecuteDBSCAN {
                             return p;
                         })
                         .filter(p -> p.isLocalRegion);
+        long writeStart = System.currentTimeMillis();
         finalClusters.coalesce(1).saveAsTextFile("output/finalClusters"+ runId);
-
+        long writeEnd = System.currentTimeMillis();
 
         long endTime = System.currentTimeMillis();
         result.runtimeMs = endTime - startTime;
         result.totalPoints = finalClusters.count();
         result.ghostPoints = ghostPoints.value();
         result.neighborQueryCount = neighborQueryCount.value();
-        result.neighborQueryTimeNs = neighborQueryTimeNs.value();
-        result.shuffleReadBytes=sparkMetricListener.shuffleRead;
-        result.shuffleWriteBytes=sparkMetricListener.shuffleWrite;
+        result.shuffleReadMBytes =sparkMetricListener.shuffleRead;
+        result.shuffleWriteMBytes=sparkMetricListener.shuffleWrite;
         result.diskSpilledBytes=sparkMetricListener.diskSpilled;
         result.memorySpilledBytes=sparkMetricListener.memorySpilled;
+
+
+        double T1Sec = neighborQueryTimeNs.value() / 1e9;
+        double readSec = (readEnd - readStart) / 1000.0;
+        double writeSec = (writeEnd - writeStart) / 1000.0;
+        double T2Sec = readSec + writeSec;
+        double totalSec = (endTime - startTime) / 1000.0;
+        double ratio = (T1Sec / totalSec) * 100.0;
+
+        result.neighborhoodTimeSec = T1Sec;
+        result.ioTimeSec = T2Sec;
+        result.totalTimeSec = totalSec;
+        result.neighborhoodPercent = ratio;
+        result.dataScale = totalPoints;
+
         return  result;
     }
-
 
     private static void addGhost(List<Tuple2<Integer, Point>> list, Point original, int targetCellId, LongAccumulator ghostPoints) {
         Point ghost = new Point(original.id, original.latitude, original.longitude, 0);
@@ -257,86 +273,4 @@ public class ExecuteDBSCAN {
         list.add(new Tuple2<>(targetCellId, ghost));
         ghostPoints.add(1);
     }
-
-
-
-    public static float distance(Point a, Point b) {
-        float dx = a.latitude - b.latitude;
-        float dy = a.longitude - b.longitude;
-        return dx * dx + dy * dy;
-    }
-
-
-    public static void localDBSCAN(List<Point> points, float eps, int minPts,LongAccumulator queryCount, LongAccumulator queryTime) {
-
-        Map<Float, Boolean> visited = new HashMap<>();
-        int localClusterId = 0;
-
-        for (Point p : points) {
-            if (visited.getOrDefault(p.id, false)) {
-                continue;
-            }
-
-            visited.put(p.id, true);
-            //List<Point> neighbors = regionQuery(points, p, eps, queryCount, queryTime);
-            KDTree kdTree=new KDTree(points);
-
-            List<Point> neighbors =kdTree.radiusSearch(p,eps,queryCount,queryTime);
-
-            if (neighbors.size() < minPts) {
-                p.clusterId = -1;
-                p.isCorePoint = false;
-            } else {
-                p.isCorePoint = true;
-                localClusterId++;
-                expandCluster(kdTree, p, neighbors, localClusterId, eps, minPts, visited, queryCount, queryTime);
-            }
-        }
-    }
-
-    public static void expandCluster(KDTree kdTree, Point p, List<Point> neighbors,
-                                     int clusterId, float eps, int minPts, Map<Float, Boolean> visited,
-                                     LongAccumulator queryCount, LongAccumulator queryTime) {
-        p.clusterId = clusterId;
-
-        Queue<Point> seeds = new LinkedList<>(neighbors);
-
-        while (!seeds.isEmpty()) {
-            Point q = seeds.poll();
-
-            if (!visited.getOrDefault(q.id, false)) {
-                visited.put(q.id, true);
-                //List<Point> qNeighbors = regionQuery(points, q, eps, queryCount, queryTime);
-
-                List<Point> qNeighbors =kdTree.radiusSearch(q,eps,queryCount,queryTime);
-                if (qNeighbors.size() >= minPts) {
-                    q.isCorePoint = true;
-                    seeds.addAll(qNeighbors);
-                }
-            }
-
-            if (q.clusterId <= 0) {
-                q.clusterId = clusterId;
-            }
-        }
-    }
-
-
-    public static List<Point> regionQuery(List<Point> points, Point p, float eps, LongAccumulator queryCount, LongAccumulator queryTime) {
-        long start = System.nanoTime();
-
-        List<Point> neighbors = new ArrayList<>();
-        for (Point q : points) {
-            if (distance(p, q) <= eps *eps ) {
-                neighbors.add(q);
-            }
-        }
-
-        long end = System.nanoTime();
-        queryTime.add(end - start);
-        queryCount.add(1);
-
-        return neighbors;
-    }
-
 }

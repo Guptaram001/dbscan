@@ -16,23 +16,30 @@ public class Result implements Serializable {
 
     // DBSCAN metrics
     public long neighborQueryCount;
-    public float neighborQueryTimeNs;
 
     // Spark system metrics
-    public long shuffleReadBytes;
-    public long shuffleWriteBytes;
+    public long shuffleReadMBytes;
+    public long shuffleWriteMBytes;
     public long memorySpilledBytes;
     public long diskSpilledBytes;
 
+    public double neighborhoodTimeSec;  // T1
+    public double ioTimeSec;             // T2
+    public double totalTimeSec;          // Ts
+    public double neighborhoodPercent;     // T1 / Ts
+    public long dataScale;               // number of points
+
+
     @Override
     public String toString(){
-        return eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+runtimeMs+","+totalPoints+","
-                +ghostPoints+","+neighborQueryCount+","+neighborQueryTimeNs+","+shuffleReadBytes+","+shuffleWriteBytes
-                +","+memorySpilledBytes+","+diskSpilledBytes;
+        return "Result:"+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+runtimeMs+","+totalPoints+","
+                +ghostPoints+","+neighborQueryCount+","+shuffleReadMBytes+","+shuffleWriteMBytes
+                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+dataScale+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec;
     }
 
     public String printHeader(){
         return "eps,minPts,cellFactor,bufferFactor,mergeStrategy,runtimeMs,totalPoints,ghostPoints,neighborQueryCount," +
-                "neighborQueryTimeNs,shuffleReadBytes,shuffleWriteBytes,memorySpilledBytes,diskSpilledBytes";
+                "shuffleReadMBytes,shuffleWriteMBytes,memorySpilledBytes,diskSpilledBytes,"+
+                "neighborhoodPercent,dataScale,ioTimeSec,totalTimeSec,neighborhoodTimeSec";
     }
 }

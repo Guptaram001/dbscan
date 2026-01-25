@@ -3,7 +3,7 @@ package spark;
 import java.io.Serializable;
 
 public class Point implements Serializable {
-    float id;
+    long id;
     float latitude;
     float longitude;
     int clusterId;
@@ -11,7 +11,7 @@ public class Point implements Serializable {
     boolean isCorePoint;
     int cellId;
 
-    Point(float id,float latitude, float longitude, int clusterId) {
+    Point(long id,float latitude, float longitude, int clusterId) {
         this.id = id;
         this.latitude = latitude;
         this.longitude = longitude;

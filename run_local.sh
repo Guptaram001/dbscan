@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-INPUT_FILE=${1:-src/main/resources/densired_2_shrink.csv}
+INPUT_FILE=${1:-src/main/resources/k10.csv}
 
 echo "Building project"
 mvn clean package -DskipTests
