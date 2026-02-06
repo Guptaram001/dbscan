@@ -42,3 +42,9 @@ output/
 results/
 
 spark-cluster/shared/
+
+
+visual/
+
+.metals/
+testgraphx.py

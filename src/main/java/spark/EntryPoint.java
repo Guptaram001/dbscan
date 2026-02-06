@@ -18,8 +18,8 @@ public class EntryPoint {
 //        );
 
         List<ExecutionConfiguration> tests = List.of(
-               // new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
-                 new ExecutionConfiguration(2f, 3, 3, 1,"UF", true,args[0])
+                 new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
+               // new ExecutionConfiguration(2f, 3, 3, 1,"UF", true,args[0])
 
         );
 
