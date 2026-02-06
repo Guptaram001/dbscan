@@ -379,6 +379,8 @@ public class ExecuteDBSCAN {
         result.totalTimeSec = totalSec;
         result.neighborhoodPercent = ratio;
         result.dataScale = totalPoints;
+        result.numClusters=localToGlobal.size();
+        result.noisePoints=(int)finalClusters.filter(point -> point.clusterId<0).count();
 
         return  result;
     }

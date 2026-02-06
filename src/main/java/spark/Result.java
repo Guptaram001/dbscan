@@ -27,19 +27,21 @@ public class Result implements Serializable {
     public double ioTimeSec;             // T2
     public double totalTimeSec;          // Ts
     public double neighborhoodPercent;     // T1 / Ts
-    public long dataScale;               // number of points
+    public long dataScale;
+    public int numClusters;
+    public int noisePoints;
 
 
     @Override
     public String toString(){
         return "Result:"+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+runtimeMs+","+totalPoints+","
                 +ghostPoints+","+neighborQueryCount+","+shuffleReadMBytes+","+shuffleWriteMBytes
-                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+dataScale+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec;
+                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+dataScale+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints;
     }
 
     public String printHeader(){
         return "eps,minPts,cellFactor,bufferFactor,mergeStrategy,runtimeMs,totalPoints,ghostPoints,neighborQueryCount," +
                 "shuffleReadMBytes,shuffleWriteMBytes,memorySpilledBytes,diskSpilledBytes,"+
-                "neighborhoodPercent,dataScale,ioTimeSec,totalTimeSec,neighborhoodTimeSec";
+                "neighborhoodPercent,dataScale,ioTimeSec,totalTimeSec,neighborhoodTimeSec,numClusters,noisePoints";
     }
 }

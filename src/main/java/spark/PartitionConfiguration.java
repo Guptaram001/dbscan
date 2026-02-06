@@ -5,11 +5,11 @@ import java.io.Serializable;
 public class PartitionConfiguration implements Serializable {
 
         final float minLatitude, maxLatitude, minLongitude, maxLongitude;
-        final float cellSize;
-        final float buffer;
-        final int numCellsX, numCellsY;
+        public final float cellSize;
+        public final float buffer;
+        public final int numCellsX, numCellsY;
 
-        PartitionConfiguration(float minX, float maxX, float minY, float maxY, float eps,float cellSize,float buffer) {
+        public PartitionConfiguration(float minX, float maxX, float minY, float maxY, float eps,float cellSize,float buffer) {
             this.minLatitude = minX;
             this.maxLatitude = maxX;
             this.minLongitude = minY;
