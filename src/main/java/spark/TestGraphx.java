@@ -67,8 +67,10 @@ public class TestGraphx {
         float maxLatitude = points.map(p -> p.latitude).reduce(Float::max);
         float minLongitude = points.map(p -> p.longitude).reduce(Float::min);
         float maxLongitude = points.map(p -> p.longitude).reduce(Float::max);
+        float cellFactor=3;
+        float bufferFactor=1;
 
-        PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude, eps);
+        PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude, eps,cellFactor,bufferFactor);
         final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
 
         JavaPairRDD<Integer, Point> partitionedToCellsRDD = points.flatMapToPair(p -> {
