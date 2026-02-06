@@ -20,6 +20,8 @@ public class ExecuteDBSCAN {
         result.bufferFactor=executionConfiguration.bufferFactor;
         result.mergeStrategy=executionConfiguration.mergeStrategy;
         float eps2=result.eps*result.eps;
+        float eps=executionConfiguration.eps;
+        boolean DEBUG=executionConfiguration.DEBUG;
 
         String inputPath = executionConfiguration.inputPath;
 
@@ -44,7 +46,8 @@ public class ExecuteDBSCAN {
 
 
         long totalPoints = points.count();
-        System.out.println("Total points: " + totalPoints);
+        if (DEBUG)
+            System.out.println("Total points: " + totalPoints);
 
         String runId = String.valueOf(System.currentTimeMillis());
 
@@ -54,7 +57,7 @@ public class ExecuteDBSCAN {
         float minLongitude = points.map(p -> p.longitude).reduce(Float::min);
         float maxLongitude = points.map(p -> p.longitude).reduce(Float::max);
 
-        PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude, result.eps);
+        PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude,result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
         final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
 
         JavaPairRDD<Integer, Point> partitionedToCellsRDD = points.flatMapToPair(p -> {
@@ -123,9 +126,10 @@ public class ExecuteDBSCAN {
             }
             return assignments.iterator();
         });
-
-        System.out.println("Points Partitioned based on home cell ");
-        partitionedToCellsRDD.take(20).forEach(pair -> System.out.println(pair._1()+" "+pair._2()));
+        if (DEBUG){
+            System.out.println("Points Partitioned based on home cell ");
+            partitionedToCellsRDD.take(20).forEach(pair -> System.out.println(pair._1()+" "+pair._2()));
+        }
 
         //Groups each points based on the cells they belong to and execute DBSCAN locally.
         JavaPairRDD<Integer, Point> dbscanClusteredAsPerCellsRDD =
@@ -146,16 +150,21 @@ public class ExecuteDBSCAN {
                             return out.iterator();
                         })
                         .cache();
-        System.out.println("Local DBSCAN Executed on each cells they belong ");
-        dbscanClusteredAsPerCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
+        if (DEBUG){
+            System.out.println("Local DBSCAN Executed on each cells they belong ");
+            dbscanClusteredAsPerCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
+            dbscanClusteredAsPerCellsRDD.coalesce(1).saveAsTextFile("output/dbscan"+ runId);
+        }
 
 
         JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
                 dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
                         .groupByKey();
-        System.out.println("Grouped by points by after local DBSCAN executed on each cells to initiate merge ie Same point in multiple cells");
-        groupedByPoint.take(200).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
-
+        if (DEBUG){
+            System.out.println("Grouped by points by after local DBSCAN executed on each cells to initiate merge ie Same point in multiple cells");
+            groupedByPoint.take(200).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
+            groupedByPoint.coalesce(1).saveAsTextFile("output/groupedBy"+ runId);
+        }
 
         JavaPairRDD<String, String> samePointMergeRDD =
                 groupedByPoint.flatMapToPair(entry -> {
@@ -175,20 +184,85 @@ public class ExecuteDBSCAN {
                             if (!(a.isCorePoint || b.isCorePoint))
                                 continue;
 
-                            float dist = Utils.distance(a, b);
-                            if (dist <= eps2 ) {
-                                String keyA = a.cellId + "_" + a.clusterId;
-                                String keyB = b.cellId + "_" + b.clusterId;
-                                if (!keyA.equals(keyB))
-                                    merges.add(new Tuple2<>(keyA, keyB));
-                            }
+                            String keyA = a.cellId + "_" + a.clusterId;
+                            String keyB = b.cellId + "_" + b.clusterId;
+                            if (!keyA.equals(keyB))
+                                merges.add(new Tuple2<>(keyA, keyB));
+
                         }
                     }
                     return merges.iterator();
                 });
 
-        System.out.println("Merging points that are boundary and core points in different cells");
-        samePointMergeRDD.take(200).forEach(pair -> System.out.println("Edges: "+pair._1() + ": " + pair._2()));
+
+//        JavaPairRDD<Integer, Point> boundaryPointsRDD =
+//                dbscanClusteredAsPerCellsRDD
+//                        .filter(t -> !t._2.isLocalRegion && t._2.clusterId > 0)  // Only boundary points with clusters
+//                        .mapToPair(t -> new Tuple2<>(t._1, t._2));  // (cellId, Point)
+//
+//        JavaPairRDD<String, String> crossCellMergeRDD =
+//                boundaryPointsRDD
+//                        .flatMapToPair(cellPoint -> {
+//                            int cellId = cellPoint._1;
+//                            Point p = cellPoint._2;
+//
+//                            List<Tuple2<String, Point>> resultt = new ArrayList<>();
+//
+//                            int gridX = (int) Math.floor((p.latitude - minLatitude) / eps);
+//                            int gridY = (int) Math.floor((p.longitude - minLongitude) / eps);
+//
+//                            // Emit to neighboring grid cells (9 cells total: current + 8 neighbors)
+//                            for (int dx = -1; dx <= 1; dx++) {
+//                                for (int dy = -1; dy <= 1; dy++) {
+//                                    String gridKey = (gridX + dx) + "_" + (gridY + dy);
+//                                    resultt.add(new Tuple2<>(gridKey, p));
+//                                }
+//                            }
+//
+//                            return resultt.iterator();
+//                        })
+//                        .groupByKey()
+//                        .flatMapToPair(gridGroup -> {
+//                            List<Point> pts = new ArrayList<>();
+//                            gridGroup._2.forEach(pts::add);
+//
+//                            List<Tuple2<String, String>> merges = new ArrayList<>();
+//
+//                            for (int i = 0; i < pts.size(); i++) {
+//                                for (int j = i + 1; j < pts.size(); j++) {
+//                                    Point a = pts.get(i);
+//                                    Point b = pts.get(j);
+//
+//                                    // Must be different points from different cells
+//                                    if (a.id == b.id || a.cellId == b.cellId)
+//                                        continue;
+//
+//                                    if (!(a.isCorePoint && b.isCorePoint))
+//                                        continue;
+//
+//                                    float dist = Utils.distance(a, b);
+//                                    if (dist <= eps2) {
+//                                        String keyA = a.cellId + "_" + a.clusterId;
+//                                        String keyB = b.cellId + "_" + b.clusterId;
+//
+//                                        if (!keyA.equals(keyB)) {
+//                                            merges.add(new Tuple2<>(keyA, keyB));
+//                                        }
+//                                    }
+//                                }
+//                            }
+//
+//                            return merges.iterator();
+//                        });
+//
+//        JavaPairRDD<String, String> allMergesRDD =
+//                samePointMergeRDD.union(crossCellMergeRDD).distinct();
+
+        if (DEBUG){
+            System.out.println("Merging points that are boundary and core points in different cells");
+            //samePointMergeRDD.take(200).forEach(pair -> System.out.println("Edges: "+pair._1() + ": " + pair._2()));
+            samePointMergeRDD.coalesce(1).saveAsTextFile("output/samePointMergeRDD"+ runId);
+        }
 
         Map<String, Integer> localToGlobal ;
         if (result.mergeStrategy.equals("UF"))
@@ -201,6 +275,7 @@ public class ExecuteDBSCAN {
         }
 
         Broadcast<Map<String, Integer>> bcMapToGlobalId = sc.broadcast(localToGlobal);
+
         JavaPairRDD<Long, Integer> pointToGlobalId =
                 groupedByPoint.mapValues(pts -> {
 
@@ -213,8 +288,10 @@ public class ExecuteDBSCAN {
                             Integer gid = bcMapToGlobalId.value().get(key);
                             if (gid == null) continue;
 
-                            if (p.isCorePoint) coreGid = gid;
-                            else borderGid = gid;
+                            if (p.isCorePoint)
+                                coreGid = (coreGid == null) ? gid : Math.min(coreGid, gid);
+                            else
+                                borderGid = (borderGid == null) ? gid : Math.min(borderGid, gid);
                         }
                     }
                     if (coreGid != null) return coreGid;
@@ -222,9 +299,49 @@ public class ExecuteDBSCAN {
                     return -1;
                 });
 
+//        JavaPairRDD<Long, Integer> pointToGlobalId =
+//                groupedByPoint.mapValues(pts -> {
+//                    // Collect ALL global IDs
+//                    Map<Integer, Integer> gidCounts = new HashMap<>();
+//
+//                    for (Point p : pts) {
+//                        if (p.clusterId > 0) {
+//                            String key = p.cellId + "_" + p.clusterId;
+//                            Integer gid = bcMapToGlobalId.value().get(key);
+//
+//                            if (gid != null && gid > 0) {
+//                                gidCounts.put(gid, gidCounts.getOrDefault(gid, 0) + 1);
+//                            }
+//                        }
+//                    }
+//
+//                    if (gidCounts.isEmpty()) return -1;
+//
+//                    if (gidCounts.size() > 1) {
+//                        System.err.println("TEST: Point has multiple global IDs: " + gidCounts+"Points :"+pts);
+//                    }
+//
+//                    // Return most frequent (or first if tie)
+//                    return gidCounts.entrySet().stream()
+//                            .max(Map.Entry.comparingByValue())
+//                            .map(Map.Entry::getKey)
+//                            .orElse(-1);
+//                });
+
+        if (DEBUG){
+            System.out.println("Point to Global ID Map");
+            pointToGlobalId.take(200).forEach(pair -> System.out.println("PointTOGlobal: "+pair._1() + ": " + pair._2()));
+            pointToGlobalId.coalesce(1).saveAsTextFile("output/pointToGlobalId"+ runId);
+        }
+
         JavaPairRDD<Long, Point> idPointPairRDD =
                 dbscanClusteredAsPerCellsRDD
                         .mapToPair(p -> new Tuple2<>(p._2.id, p._2));
+
+        if (DEBUG){
+            System.out.println("idPointPairRDD Map");
+            pointToGlobalId.take(50).forEach(pair -> System.out.println("idPointPairRDD: "+pair._1() + ": " + pair._2()));
+        }
 
         JavaRDD<Point> finalClusters =
                 idPointPairRDD

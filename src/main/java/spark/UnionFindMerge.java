@@ -3,11 +3,13 @@ package spark;
 import org.apache.spark.api.java.JavaPairRDD;
 import scala.Tuple2;
 
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 public class UnionFindMerge {
 
-    public Map<String, Integer> merge(JavaPairRDD<String, String> samePointMergeRDD, JavaPairRDD<Integer, Point> clusteredRDD){
+    public Map<String, Integer> merge (JavaPairRDD<String, String> samePointMergeRDD, JavaPairRDD<Integer, Point> clusteredRDD) {
 
         List<Tuple2<String, String>> samePointMergeRDDList = samePointMergeRDD.collect();
 
@@ -15,10 +17,11 @@ public class UnionFindMerge {
         for (Tuple2<String, String> e : samePointMergeRDDList) {
             uf.union(e._1, e._2);
         }
+
+
         System.out.println("Union Find String: After Insertion" );
         System.out.println(uf.parent);
         System.out.println("Total KeySet: "+uf.parent.keySet().size()+" And Values:  "+uf.parent.keySet());
-
 
         Map<String, String> keyToRoot = new HashMap<>();
         for (String k : uf.parent.keySet()) {
@@ -52,13 +55,23 @@ public class UnionFindMerge {
         }
         System.out.println("Finding the root and assigning each root Global Id: "+rootToGlobal);
 
-        Map<String, Integer> edgesToGlobal = new HashMap<>();
-        for (Map.Entry<String, String> e : keyToRoot.entrySet()) {
-            edgesToGlobal.put(e.getKey(), rootToGlobal.get(e.getValue()));
-        }
-        System.out.println("Mapping of the keys from keyRoot to Global: "+edgesToGlobal);
+        FileWriter out = null;
+        try {
+            out = new FileWriter("results/edgesToGlobal.csv");
 
-        return edgesToGlobal;
+            Map<String, Integer> edgesToGlobal = new HashMap<>();
+            for (Map.Entry<String, String> e : keyToRoot.entrySet()) {
+                edgesToGlobal.put(e.getKey(), rootToGlobal.get(e.getValue()));
+                out.write(e.getKey()+","+ rootToGlobal.get(e.getValue())+"\n");
+            }
+            System.out.println("Mapping of the keys from keyRoot to Global: " + edgesToGlobal);
+            out.flush();
+            out.close();
+            return edgesToGlobal;
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 

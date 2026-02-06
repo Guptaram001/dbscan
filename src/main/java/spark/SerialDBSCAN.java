@@ -20,6 +20,7 @@ public class SerialDBSCAN {
         result.mergeStrategy=executionConfiguration.mergeStrategy;
         float eps2=result.eps*result.eps;
         FileWriter out = new FileWriter("results/results.csv");
+        FileWriter out2 = new FileWriter("results/serialResults.csv");
 
         String inputPath = executionConfiguration.inputPath;
 
@@ -40,21 +41,20 @@ public class SerialDBSCAN {
                 });
         List<Point> pointList = points.collect();
         long readEnd = System.currentTimeMillis();
-
-        System.out.println("Points running");
         long totalPoints = pointList.size();
 
         Utils.localDBSCAN(pointList, eps2, result.minPts, neighborQueryCount, neighborQueryTimeNs);
+
         long writeStart = System.currentTimeMillis();
         for(Point point : pointList) {
-            out.write(point.toString()+"\n");
-            System.out.println("Points:"+point.toString());
+            out2.write(point.toString()+"\n");
         }
         long writeEnd = System.currentTimeMillis();
 
-        System.out.println("Points completed");
         out.flush();
         out.close();
+        out2.flush();
+        out2.close();
 
         long endTime = System.currentTimeMillis();
         result.runtimeMs = endTime - startTime;
