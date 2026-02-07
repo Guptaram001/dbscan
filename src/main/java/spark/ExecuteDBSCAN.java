@@ -1,5 +1,6 @@
 package spark;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -12,6 +13,8 @@ import java.util.*;
 public class ExecuteDBSCAN {
     //Parallel DBSCAN
     public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener) {
+
+         final float EPS = 1e-6f;
 
         Result result = new Result();
         result.eps=executionConfiguration.eps;
@@ -32,15 +35,7 @@ public class ExecuteDBSCAN {
 
         //Reads from the file and associates each with a long index as Point(index, lat, long, clusterid =0)
         long readStart = System.currentTimeMillis();
-        JavaRDD<Point> points = sc.textFile(inputPath)
-                .zipWithIndex()
-                .filter(t -> !t._1.trim().isEmpty())
-                .map(t -> {
-                    String[] parts = t._1.trim().split(",");
-                    float x = Float.parseFloat(parts[0]);
-                    float y = Float.parseFloat(parts[1]);
-                    return new Point(t._2, x, y, 0);
-                });
+        JavaRDD<Point> points=readPoints(sc,inputPath);
         points.count();
         long readEnd = System.currentTimeMillis();
 
@@ -60,100 +55,19 @@ public class ExecuteDBSCAN {
         PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude,result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
         final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
 
-        JavaPairRDD<Integer, Point> partitionedToCellsRDD = points.flatMapToPair(p -> {
-            PartitionConfiguration cfg = broadcastPartitionConf.value();
-            List<Tuple2<Integer, Point>> assignments = new ArrayList<>();
-            //Determine Home Cell (Geometric Location)
-            int homeX = (int) Math.floor((p.latitude - minLatitude) / cfg.cellSize);
-            int homeY = (int) Math.floor((p.longitude - minLongitude) / cfg.cellSize);
-            // Fix to safe bounds
-            homeX = Math.max(0, Math.min(homeX, cfg.numCellsX - 1));
-            homeY = Math.max(0, Math.min(homeY, cfg.numCellsY - 1));
-            int homeCellId = homeY * cfg.numCellsX + homeX;
-            // Add to Home Cell (Always Local)
-            Point local = new Point(p.id, p.latitude, p.longitude, 0);
-            local.cellId = homeCellId;
-            local.isLocalRegion = true;
-            assignments.add(new Tuple2<>(homeCellId, local));
-            // Check Boundaries for Neighbor Replication (Ghost Points)
-            float cellMinX = minLatitude + homeX * cfg.cellSize;
-            float cellMinY = minLongitude + homeY * cfg.cellSize;
-
-            float dxLeft = p.latitude - cellMinX;
-            float dxRight = (cellMinX + cfg.cellSize) - p.latitude;
-            float dyBottom = p.longitude - cellMinY;
-            float dyTop = (cellMinY + cfg.cellSize) - p.longitude;
-
-            // Left Neighbor
-            if (homeX > 0 && dxLeft <= cfg.buffer) {
-                addGhost(assignments, p, homeY * cfg.numCellsX + (homeX - 1),ghostPoints);
-            }
-            // Right Neighbor
-            if (homeX < cfg.numCellsX - 1 && dxRight <= cfg.buffer) {
-                addGhost(assignments, p, homeY * cfg.numCellsX + (homeX + 1),ghostPoints);
-            }
-            // Bottom Neighbor
-            if (homeY > 0 && dyBottom <= cfg.buffer) {
-                addGhost(assignments, p, (homeY - 1) * cfg.numCellsX + homeX,ghostPoints);
-            }
-            // Top Neighbor
-            if (homeY < cfg.numCellsY - 1 && dyTop <= cfg.buffer) {
-                addGhost(assignments, p, (homeY + 1) * cfg.numCellsX + homeX,ghostPoints);
-            }
-
-            // Top-Left (homeX-1, homeY+1)
-            if (homeX > 0 && homeY < cfg.numCellsY - 1 && dxLeft <= cfg.buffer && dyTop <= cfg.buffer) {
-                int cellId = (homeY + 1) * cfg.numCellsX + (homeX - 1);
-                addGhost(assignments, p, cellId,ghostPoints);
-            }
-
-            // Top-Right (homeX+1, homeY+1)
-            if (homeX < cfg.numCellsX - 1 && homeY < cfg.numCellsY - 1 && dxRight <= cfg.buffer && dyTop <= cfg.buffer) {
-                int cellId = (homeY + 1) * cfg.numCellsX + (homeX + 1);
-                addGhost(assignments, p, cellId,ghostPoints);
-            }
-
-            // Bottom-Left (homeX-1, homeY-1)
-            if (homeX > 0 && homeY > 0 && dxLeft <= cfg.buffer && dyBottom <= cfg.buffer) {
-                int cellId = (homeY - 1) * cfg.numCellsX + (homeX - 1);
-                addGhost(assignments, p, cellId,ghostPoints);
-            }
-
-            // Bottom-Right (homeX+1, homeY-1)
-            if (homeX < cfg.numCellsX - 1 && homeY > 0 && dxRight <= cfg.buffer && dyBottom <= cfg.buffer) {
-                int cellId = (homeY - 1) * cfg.numCellsX + (homeX + 1);
-                addGhost(assignments, p, cellId,ghostPoints);
-            }
-            return assignments.iterator();
-        });
+        JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points, minLatitude, minLongitude, broadcastPartitionConf, ghostPoints, EPS);
         if (DEBUG){
             System.out.println("Points Partitioned based on home cell ");
             partitionedToCellsRDD.take(20).forEach(pair -> System.out.println(pair._1()+" "+pair._2()));
+            partitionedToCellsRDD.coalesce(1).saveAsTextFile("output/partitionedToCellsRDD"+runId);
         }
 
         //Groups each points based on the cells they belong to and execute DBSCAN locally.
-        JavaPairRDD<Integer, Point> dbscanClusteredAsPerCellsRDD =
-                partitionedToCellsRDD
-                        .groupByKey()
-                        .flatMapToPair(cell -> {
-
-                            int cellId = cell._1;
-                            List<Point> cellPoints = new ArrayList<>();
-                            cell._2.forEach(cellPoints::add);
-
-                            Utils.localDBSCAN(cellPoints, eps2, result.minPts, neighborQueryCount, neighborQueryTimeNs);
-
-                            List<Tuple2<Integer, Point>> out = new ArrayList<>();
-                            for (Point p : cellPoints) {
-                                out.add(new Tuple2<>(cellId, p));
-                            }
-                            return out.iterator();
-                        })
-                        .cache();
+        JavaPairRDD<Integer, Point> dbscanClusteredAsPerCellsRDD = dbscanClusteredAsPerCells(partitionedToCellsRDD,eps2,result.minPts,neighborQueryCount,neighborQueryTimeNs);
         if (DEBUG){
             System.out.println("Local DBSCAN Executed on each cells they belong ");
             dbscanClusteredAsPerCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
-            dbscanClusteredAsPerCellsRDD.coalesce(1).saveAsTextFile("output/dbscan"+ runId);
+            dbscanClusteredAsPerCellsRDD.distinct().coalesce(1).saveAsTextFile("output/dbscan"+ runId);
         }
 
 
@@ -163,37 +77,16 @@ public class ExecuteDBSCAN {
         if (DEBUG){
             System.out.println("Grouped by points by after local DBSCAN executed on each cells to initiate merge ie Same point in multiple cells");
             groupedByPoint.take(200).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
-            groupedByPoint.coalesce(1).saveAsTextFile("output/groupedBy"+ runId);
+            groupedByPoint.distinct().coalesce(1).saveAsTextFile("output/groupedBy"+ runId);
         }
 
-        JavaPairRDD<String, String> samePointMergeRDD =
-                groupedByPoint.flatMapToPair(entry -> {
 
-                    List<Point> pts = new ArrayList<>();
-                    entry._2.forEach(pts::add);
-
-                    List<Tuple2<String, String>> merges = new ArrayList<>();
-
-                    for (int i = 0; i < pts.size(); i++) {
-                        for (int j = i + 1; j < pts.size(); j++) {
-                            Point a = pts.get(i);
-                            Point b = pts.get(j);
-
-                            if (a.clusterId <= 0 || b.clusterId <= 0)
-                                continue;
-                            if (!(a.isCorePoint || b.isCorePoint))
-                                continue;
-
-                            String keyA = a.cellId + "_" + a.clusterId;
-                            String keyB = b.cellId + "_" + b.clusterId;
-                            if (!keyA.equals(keyB))
-                                merges.add(new Tuple2<>(keyA, keyB));
-
-                        }
-                    }
-                    return merges.iterator();
-                });
-
+        JavaPairRDD<String, String> samePointMergeRDD= samePointMerge(groupedByPoint);
+        if (DEBUG){
+            System.out.println("Merging points that are boundary and core points in different cells");
+            samePointMergeRDD.take(200).forEach(pair -> System.out.println("Edges: "+pair._1() + ": " + pair._2()));
+            samePointMergeRDD.distinct().coalesce(1).saveAsTextFile("output/samePointMergeRDD"+ runId);
+        }
 
 //        JavaPairRDD<Integer, Point> boundaryPointsRDD =
 //                dbscanClusteredAsPerCellsRDD
@@ -258,11 +151,6 @@ public class ExecuteDBSCAN {
 //        JavaPairRDD<String, String> allMergesRDD =
 //                samePointMergeRDD.union(crossCellMergeRDD).distinct();
 
-        if (DEBUG){
-            System.out.println("Merging points that are boundary and core points in different cells");
-            //samePointMergeRDD.take(200).forEach(pair -> System.out.println("Edges: "+pair._1() + ": " + pair._2()));
-            samePointMergeRDD.coalesce(1).saveAsTextFile("output/samePointMergeRDD"+ runId);
-        }
 
         Map<String, Integer> localToGlobal ;
         if (result.mergeStrategy.equals("UF"))
@@ -275,29 +163,13 @@ public class ExecuteDBSCAN {
         }
 
         Broadcast<Map<String, Integer>> bcMapToGlobalId = sc.broadcast(localToGlobal);
+        JavaPairRDD<Long, Integer> pointToGlobalId=pointToGlobal(groupedByPoint,bcMapToGlobalId);
+        if (DEBUG){
+            System.out.println("Point to Global ID Map");
+            pointToGlobalId.take(200).forEach(pair -> System.out.println("PointTOGlobal: "+pair._1() + ": " + pair._2()));
+            pointToGlobalId.coalesce(1).saveAsTextFile("output/pointToGlobalId"+ runId);
+        }
 
-        JavaPairRDD<Long, Integer> pointToGlobalId =
-                groupedByPoint.mapValues(pts -> {
-
-                    Integer coreGid = null;
-                    Integer borderGid = null;
-
-                    for (Point p : pts) {
-                        if (p.clusterId > 0) {
-                            String key = p.cellId + "_" + p.clusterId;
-                            Integer gid = bcMapToGlobalId.value().get(key);
-                            if (gid == null) continue;
-
-                            if (p.isCorePoint)
-                                coreGid = (coreGid == null) ? gid : Math.min(coreGid, gid);
-                            else
-                                borderGid = (borderGid == null) ? gid : Math.min(borderGid, gid);
-                        }
-                    }
-                    if (coreGid != null) return coreGid;
-                    if (borderGid != null) return borderGid;
-                    return -1;
-                });
 
 //        JavaPairRDD<Long, Integer> pointToGlobalId =
 //                groupedByPoint.mapValues(pts -> {
@@ -328,11 +200,7 @@ public class ExecuteDBSCAN {
 //                            .orElse(-1);
 //                });
 
-        if (DEBUG){
-            System.out.println("Point to Global ID Map");
-            pointToGlobalId.take(200).forEach(pair -> System.out.println("PointTOGlobal: "+pair._1() + ": " + pair._2()));
-            pointToGlobalId.coalesce(1).saveAsTextFile("output/pointToGlobalId"+ runId);
-        }
+
 
         JavaPairRDD<Long, Point> idPointPairRDD =
                 dbscanClusteredAsPerCellsRDD
@@ -384,6 +252,185 @@ public class ExecuteDBSCAN {
 
         return  result;
     }
+
+    public static JavaRDD<Point> readPoints(JavaSparkContext sc,String inputPath){
+         return sc.textFile(inputPath)
+                .zipWithIndex()
+                .filter(t -> !t._1.trim().isEmpty())
+                .map(t -> {
+                    String[] parts = t._1.trim().split(",");
+                    float x = Float.parseFloat(parts[0]);
+                    float y = Float.parseFloat(parts[1]);
+                    return new Point(t._2, x, y, 0);
+                });
+    }
+
+    public static JavaPairRDD<Long, Integer> pointToGlobal(JavaPairRDD<Long, Iterable<Point>> groupedByPoint,Broadcast<Map<String, Integer>> bcMapToGlobalId)
+    {
+        return groupedByPoint.mapValues(pts -> {
+
+                Integer coreGid = null;
+                Integer borderGid = null;
+
+                for (Point p : pts) {
+                    if (p.clusterId > 0) {
+                        String key = p.cellId + "_" + p.clusterId;
+                        Integer gid = bcMapToGlobalId.value().get(key);
+                        if (gid == null) continue;
+
+                        if (p.isCorePoint)
+                            coreGid = (coreGid == null) ? gid : Math.min(coreGid, gid);
+                        else
+                            borderGid = (borderGid == null) ? gid : Math.min(borderGid, gid);
+                    }
+                }
+                if (coreGid != null) return coreGid;
+                if (borderGid != null) return borderGid;
+                return -1;
+            });
+    }
+
+
+    public static JavaPairRDD<String, String>  samePointMerge(JavaPairRDD<Long, Iterable<Point>> groupedByPoint){
+         return groupedByPoint.flatMapToPair(entry -> {
+
+                    List<Point> pts = new ArrayList<>();
+                    entry._2.forEach(pts::add);
+
+                    List<Tuple2<String, String>> merges = new ArrayList<>();
+
+                    for (int i = 0; i < pts.size(); i++) {
+                        for (int j = i + 1; j < pts.size(); j++) {
+                            Point a = pts.get(i);
+                            Point b = pts.get(j);
+
+                            if (a.clusterId <= 0 || b.clusterId <= 0)
+                                continue;
+                            if (!(a.isCorePoint || b.isCorePoint))
+                                continue;
+
+                            String keyA = a.cellId + "_" + a.clusterId;
+                            String keyB = b.cellId + "_" + b.clusterId;
+                            if (!keyA.equals(keyB))
+                                merges.add(new Tuple2<>(keyA, keyB));
+                        }
+                    }
+                    return merges.iterator();
+                });
+    }
+
+    public static JavaPairRDD<Integer, Point> dbscanClusteredAsPerCells(JavaPairRDD<Integer, Point> partitionedToCellsRDD,
+            float eps2, int minPts, LongAccumulator neighborQueryCount, LongAccumulator neighborQueryTimeNs) {
+
+        return partitionedToCellsRDD
+                .groupByKey()
+                .flatMapToPair(cell -> {
+
+                    int cellId = cell._1;
+                    List<Point> cellPoints = new ArrayList<>();
+                    cell._2.forEach(cellPoints::add);
+
+                    // Local DBSCAN inside one cell
+                    Utils.localDBSCAN(
+                            cellPoints,
+                            eps2,
+                            minPts,
+                            neighborQueryCount,
+                            neighborQueryTimeNs
+                    );
+
+                    List<Tuple2<Integer, Point>> out = new ArrayList<>();
+                    for (Point p : cellPoints) {
+                        out.add(new Tuple2<>(cellId, p));
+                    }
+                    return out.iterator();
+                })
+                .cache();
+    }
+
+
+    public static JavaPairRDD<Integer, Point> partitionPointsToCells(JavaRDD<Point> points, float minLatitude, float minLongitude,
+            Broadcast<PartitionConfiguration> broadcastPartitionConf, LongAccumulator ghostPoints, float EPS) {
+
+        JavaPairRDD<Integer, Point> partitionedToCellsRDD = points.flatMapToPair(p -> {
+            PartitionConfiguration cfg = broadcastPartitionConf.value();
+            List<Tuple2<Integer, Point>> assignments = new ArrayList<>();
+            //Determine Home Cell (Geometric Location)
+            int homeX = (int) Math.floor((p.latitude - minLatitude) / cfg.cellSize);
+            int homeY = (int) Math.floor((p.longitude - minLongitude) / cfg.cellSize);
+            // Fix to safe bounds
+            homeX = Math.max(0, Math.min(homeX, cfg.numCellsX - 1));
+            homeY = Math.max(0, Math.min(homeY, cfg.numCellsY - 1));
+            int homeCellId = homeY * cfg.numCellsX + homeX;
+            // Add to Home Cell (Always Local)
+            Point local = new Point(p.id, p.latitude, p.longitude, 0);
+            local.cellId = homeCellId;
+            local.isLocalRegion = true;
+            assignments.add(new Tuple2<>(homeCellId, local));
+            // Check Boundaries for Neighbor Replication (Ghost Points)
+            float cellMinX = minLatitude + homeX * cfg.cellSize;
+            float cellMinY = minLongitude + homeY * cfg.cellSize;
+
+            float dxLeft = p.latitude - cellMinX;
+            float dxRight = (cellMinX + cfg.cellSize) - p.latitude;
+            float dyBottom = p.longitude - cellMinY;
+            float dyTop = (cellMinY + cfg.cellSize) - p.longitude;
+
+            // Left Neighbor
+            if (homeX > 0 && dxLeft <= cfg.buffer+EPS) {
+                addGhost(assignments, p, homeY * cfg.numCellsX + (homeX - 1),ghostPoints);
+            }
+            // Right Neighbor
+            if (homeX < cfg.numCellsX - 1 && dxRight <= cfg.buffer+EPS) {
+                addGhost(assignments, p, homeY * cfg.numCellsX + (homeX + 1),ghostPoints);
+            }
+            // Bottom Neighbor
+            if (homeY > 0 && dyBottom <= cfg.buffer+EPS) {
+                addGhost(assignments, p, (homeY - 1) * cfg.numCellsX + homeX,ghostPoints);
+            }
+            // Top Neighbor
+            if (homeY < cfg.numCellsY - 1 && dyTop <= cfg.buffer+EPS) {
+                addGhost(assignments, p, (homeY + 1) * cfg.numCellsX + homeX,ghostPoints);
+            }
+
+            // Top-Left (homeX-1, homeY+1)
+            if (homeX > 0 && homeY < cfg.numCellsY - 1 && dxLeft <= cfg.buffer+EPS && dyTop <= cfg.buffer+EPS) {
+                int cellId = (homeY + 1) * cfg.numCellsX + (homeX - 1);
+                addGhost(assignments, p, cellId,ghostPoints);
+            }
+
+            // Top-Right (homeX+1, homeY+1)
+            if (homeX < cfg.numCellsX - 1 && homeY < cfg.numCellsY - 1 && dxRight <= cfg.buffer+EPS && dyTop <= cfg.buffer+EPS) {
+                int cellId = (homeY + 1) * cfg.numCellsX + (homeX + 1);
+                addGhost(assignments, p, cellId,ghostPoints);
+            }
+
+            // Bottom-Left (homeX-1, homeY-1)
+            if (homeX > 0 && homeY > 0 && dxLeft <= cfg.buffer+EPS && dyBottom <= cfg.buffer+EPS) {
+                int cellId = (homeY - 1) * cfg.numCellsX + (homeX - 1);
+                addGhost(assignments, p, cellId,ghostPoints);
+            }
+
+            // Bottom-Right (homeX+1, homeY-1)
+            if (homeX < cfg.numCellsX - 1 && homeY > 0 && dxRight <= cfg.buffer+EPS && dyBottom <= cfg.buffer+EPS) {
+                int cellId = (homeY - 1) * cfg.numCellsX + (homeX + 1);
+                addGhost(assignments, p, cellId,ghostPoints);
+            }
+
+            if (p.latitude == 0.6f && p.longitude == 0.45f) {
+                System.out.println("DEBUG (0.60,0.45)");
+                System.out.println("homeX=" + homeX + ", homeY=" + homeY);
+                System.out.println("dxRight=" + dxRight + ", buffer=" + cfg.buffer);
+                System.out.println("homeX < numCellsX-1 = " + (homeX < cfg.numCellsX - 1));
+            }
+            return assignments.iterator();
+        });
+
+        return partitionedToCellsRDD;
+    }
+
+
+
 
     private static void addGhost(List<Tuple2<Integer, Point>> list, Point original, int targetCellId, LongAccumulator ghostPoints) {
         Point ghost = new Point(original.id, original.latitude, original.longitude, 0);

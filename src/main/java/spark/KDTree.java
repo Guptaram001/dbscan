@@ -5,10 +5,12 @@ import org.apache.spark.util.LongAccumulator;
 import java.util.*;
 
 public class KDTree {
+    final float EPS = 1e-6f;
     static class Node {
         Point point;
         Node left, right;
         int dimension;
+
 
         Node(Point p, int dimension) {
             this.point = p;
@@ -51,7 +53,7 @@ public class KDTree {
 
     private void radiusSearch(Node node, Point t, float eps2, List<Point> neighbours) {
         if (node == null) return;
-        if (distance(node.point, t) <= eps2) neighbours.add(node.point);
+        if (distance(node.point, t) <= eps2+EPS) neighbours.add(node.point);
 
         int axis = node.dimension;
         float diff = (axis == 0 ? t.latitude - node.point.latitude : t.longitude - node.point.longitude);

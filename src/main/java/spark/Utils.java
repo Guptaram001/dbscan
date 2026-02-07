@@ -6,6 +6,7 @@ import scala.Tuple2;
 import java.util.*;
 
 public class Utils {
+    final static float EPS = 1e-6f;
     public static void localDBSCAN(List<Point> points, float eps2, int minPts, LongAccumulator queryCount, LongAccumulator queryTime) {
 
         //Map<Float, Boolean> visited = new HashMap<>();
@@ -78,7 +79,7 @@ public class Utils {
 
         List<Point> neighbors = new ArrayList<>();
         for (Point q : points) {
-            if (distance(p, q) <= eps2 ) {
+            if (distance(p, q) <= eps2 +EPS ) {
                 neighbors.add(q);
             }
         }
