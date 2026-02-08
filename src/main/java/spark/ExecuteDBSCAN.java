@@ -14,7 +14,7 @@ public class ExecuteDBSCAN {
     //Parallel DBSCAN
     public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener) {
 
-         final float EPS = 1e-6f;
+        final float EPS = 1e-6f;
 
         Result result = new Result();
         result.eps=executionConfiguration.eps;
@@ -37,6 +37,8 @@ public class ExecuteDBSCAN {
         long readStart = System.currentTimeMillis();
         JavaRDD<Point> points=readPoints(sc,inputPath);
         points.count();
+        //Point(2, 0.8, 0.9, 0) is the first point in the file
+
         long readEnd = System.currentTimeMillis();
 
 
@@ -53,6 +55,7 @@ public class ExecuteDBSCAN {
         float maxLongitude = points.map(p -> p.longitude).reduce(Float::max);
 
         PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude,result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
+        
         final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
 
         JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points, minLatitude, minLongitude, broadcastPartitionConf, ghostPoints, EPS);

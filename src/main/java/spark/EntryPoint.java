@@ -4,6 +4,8 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 
 import java.io.FileWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 
 public class EntryPoint {
@@ -24,6 +26,7 @@ public class EntryPoint {
 
         );
 
+        Files.createDirectories(Paths.get("results"));
         FileWriter out = new FileWriter("results/results.csv");
 
         for (ExecutionConfiguration executionConfiguration : tests) {

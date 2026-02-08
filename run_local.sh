@@ -3,6 +3,17 @@ set -e
 
 INPUT_FILE=${1:-src/main/resources/k10.csv}
 
+# Spark 4.x requires Java 17+. Prefer Java 17 for spark-submit.
+JAVA_VERSION=$(java -version 2>&1 | head -1)
+if ! echo "$JAVA_VERSION" | grep -qE '"1[789]\.|"2[0-9]\.'; then
+  if J17=$(/usr/libexec/java_home -v 17 2>/dev/null); then
+    export JAVA_HOME=$J17
+  elif [ -d /opt/homebrew/opt/openjdk@17 ]; then
+    export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+  fi
+  [ -n "$JAVA_HOME" ] && echo "Using JAVA_HOME=$JAVA_HOME for Spark (Java 17 required)"
+fi
+
 echo "Building project"
 mvn clean package -DskipTests
 

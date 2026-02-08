@@ -42,3 +42,5 @@ output/
 results/
 
 spark-cluster/shared/
+
+.metals/
