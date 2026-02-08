@@ -36,8 +36,8 @@ checkpoint/
 metastore_db/
 derby.log
 spark-warehouse/
-src/main/resources/
-
+src/main/resources/densired_2_shrink.csv
+src/main/resources/densired_2.csv
 output/
 results/
 
