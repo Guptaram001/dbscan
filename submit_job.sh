@@ -63,6 +63,7 @@ if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
       --total-executor-cores $CORES \
       --conf spark.cores.max=$CORES \
       --conf spark.driver.bindAddress=127.0.0.1 \
+      --conf spark.default.parallelism=$((CORES * SPARK_DEFAULT_PARALLELISM_FACTOR)) \
       --conf spark.driver.host=127.0.0.1 \
       --conf spark.ui.enabled=false \
       --conf spark.eventLog.enabled=false \

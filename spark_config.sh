@@ -10,6 +10,8 @@ MASTER_PORT=7077
 WORKER_MEMORY=2g
 WORKER_CORES=2
 NUM_WORKERS=3
+SPARK_DEFAULT_PARALLELISM_FACTOR=2
+
 
 # Driver (only used when submitting Spark jobs).
 # UF/GraphX merge step collects merge edges to the driver; use 4g+ for large datasets (e.g. 10M points).

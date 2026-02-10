@@ -40,7 +40,6 @@ public class ExecuteDBSCAN {
         //Reads from the file and associates each with a long index as Point(index, lat, long, clusterid =0)
         long readStart = System.currentTimeMillis();
         JavaRDD<Point> points = readPoints(sc, inputPath);
-        points.count();
         //Point(2, 0.8, 0.9, 0) is the first point in the file
 
         long readEnd = System.currentTimeMillis();
@@ -69,11 +68,10 @@ public class ExecuteDBSCAN {
             maxCoords[dim] = points.map(p -> p.coordinates[d]).mapToDouble(Double::doubleValue).max();
         }
         PartitionConfiguration partitionConfiguration=new PartitionConfiguration(minCoords,maxCoords, result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
-        final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
         long startTime = System.currentTimeMillis();
+        final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
         JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points,broadcastPartitionConf,ghostPoints);
         //JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points, minLatitude, minLongitude, broadcastPartitionConf, ghostPoints, EPS);
-        long endTime = System.currentTimeMillis();
         if (DEBUG) {
             System.out.println("Points Partitioned based on home cell ");
             partitionedToCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + " " + pair._2()));
@@ -186,10 +184,11 @@ public class ExecuteDBSCAN {
             pointToGlobalId.take(200).forEach(pair -> System.out.println("PointTOGlobal: " + pair._1() + ": " + pair._2()));
             pointToGlobalId.coalesce(1).saveAsTextFile("output/pointToGlobalId" + runId);
         }
+        pointToGlobalId.collect();
+        long endTime = System.currentTimeMillis();
 
         JavaPairRDD<Long, Point> idPointPairRDD = dbscanClusteredAsPerCellsRDD
                         .mapToPair(p -> new Tuple2<>(p._2.id, p._2));
-
         if (DEBUG) {
             System.out.println("idPointPairRDD Map");
             pointToGlobalId.take(50).forEach(pair -> System.out.println("idPointPairRDD: " + pair._1() + ": " + pair._2()));
