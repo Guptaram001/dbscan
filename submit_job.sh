@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Load shared cluster config (same as workers)
+source "$SCRIPT_DIR/spark_config.sh"
+
 MODE=${1:-Serial}
 INPUT_FILE=${2:-src/main/resources/densired_2_shrink.csv}
 DEBUG=${3:-false}
@@ -9,23 +13,16 @@ DEBUG=${3:-false}
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 export PATH="$JAVA_HOME/bin:$PATH"
 
-#Resource
-CORES=9
-MEMORY=10g
-
-# Spark cluster configuration
-MASTER_HOST=localhost
-MASTER_PORT=7077
-WORKER_MEMORY=3g
-WORKER_CORES=2
-NUM_WORKERS=3
-DRIVER_MEMORY=1g
-DRIVER_CORES=1
+# Job uses all executor cores from cluster by default (from spark_config.sh)
+CORES=${TOTAL_EXECUTOR_CORES:-$((NUM_WORKERS * WORKER_CORES))}
 
 echo "Mode: $MODE"
 echo "Input: $INPUT_FILE"
-echo "Cores budget: $CORES"
-echo "Memory budget: $MEMORY"
+if [ "$MODE" == "Serial" ]; then
+  echo "Serial cores: $SERIAL_CORES, memory: ${SERIAL_MEMORY:-$WORKER_MEMORY}"
+else
+  echo "Cores (from cluster: ${NUM_WORKERS} workers x ${WORKER_CORES} cores): $CORES"
+fi
 
 echo "Building project..."
 mvn clean package -DskipTests
@@ -35,18 +32,20 @@ mkdir -p results
 mkdir -p /tmp/spark-events
 
 
-if [ "$MODE" == "Serial"  ]; then
+if [ "$MODE" == "Serial" ]; then
   echo ""
-  echo "Running SERIAL DBSCAN (pure Java)"
+  echo "Running SERIAL DBSCAN (pure Java, brute-force neighbor search)"
   echo ""
 
+  _SERIAL_MEMORY=${SERIAL_MEMORY:-$WORKER_MEMORY}
+
   java \
-    -Xmx$WORKER_MEMORY \
+    -Xmx$_SERIAL_MEMORY \
     -XX:+UseG1GC \
-    -Djava.util.concurrent.ForkJoinPool.common.parallelism=$WORKER_CORES \
+    -Djava.util.concurrent.ForkJoinPool.common.parallelism=$SERIAL_CORES \
     -cp target/TemplateSpark-1.0-SNAPSHOT.jar \
     spark.SerialEntryPoint \
-    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+    "$INPUT_FILE" "$MODE" "$_SERIAL_MEMORY" "$SERIAL_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
 fi
 
 if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then

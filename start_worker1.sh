@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/spark_config.sh"
+
 # Set JAVA_HOME to Java 17 for Spark 4.1.0 compatibility
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# Spark cluster configuration
-MASTER_HOST=localhost
-MASTER_PORT=7077
-WORKER_MEMORY=3g
-WORKER_CORES=2
 WORKER_NUM=1
 
 # Find Spark installation directory
