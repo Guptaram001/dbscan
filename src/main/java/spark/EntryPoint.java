@@ -12,34 +12,21 @@ public class EntryPoint {
 
     public static void main(String[] args) throws Exception {
         Result res;
-//        List<ExecutionConfiguration> experiments = List.of(
-//                new ExecutionConfiguration(0.02, 30, 3, 1,"UF", args[0]),
-//                new ExecutionConfiguration(0.03, 50, 3.0, 1,"UF", args[0]),
-//                new ExecutionConfiguration(0.03, 50, 3.0, 1,"GraphX", args[0]),
-//                new ExecutionConfiguration(0.03, 50, 3.0, 1,"SerialDBSCAN", args[0]),
-//        );
+        String mode = args.length > 1 ? args[1] : "Serial";
 
         List<ExecutionConfiguration> tests = List.of(
-               // new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
-                 //new ExecutionConfiguration(0.1f, 2, 3, 1,"UF", true,args[0])
-                new ExecutionConfiguration(0.03f, 70, 3, 1,"UF", true,args[0])
+                // new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
+                //new ExecutionConfiguration(0.1f, 2, 3, 1,"UF", true,args[0])
+                new ExecutionConfiguration(0.03f, 50, 3, 1,mode, true,args[0])
 
         );
-        System.out.println("Running " + tests.size() + " tests"+args[0]);
 
-<<<<<<< Updated upstream
         Files.createDirectories(Paths.get("results"));
-        FileWriter out = new FileWriter("results/results.csv");
-=======
-        FileWriter out = new FileWriter("results/results.csv", true);
-
-        boolean headerWritten = false;
->>>>>>> Stashed changes
-
         for (ExecutionConfiguration executionConfiguration : tests) {
+            String runId = String.valueOf(System.currentTimeMillis());
+            Files.createDirectories(Paths.get("results/Exec_"+runId));
+            FileWriter out = new FileWriter("results/Exec_"+runId+"/results.txt");
 
-//            SparkConf conf = new SparkConf()
-//                    .setAppName("DBSCAN-" + executionConfiguration.formId());
             SparkConf conf = new SparkConf()
                     .setAppName("DBSCAN-" + executionConfiguration.formId())
                     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -51,23 +38,18 @@ public class EntryPoint {
             SparkMetricListener sparkMetricListener = new SparkMetricListener();
             sc.sc().addSparkListener(sparkMetricListener);
 
-            if(executionConfiguration.mergeStrategy.equals("SerialDBSCAN")){
-                res = SerialDBSCAN.executeDBSCAN( executionConfiguration);
+            if(executionConfiguration.mergeStrategy.equals("Serial")){
+                res = SerialDBSCAN.executeDBSCAN( executionConfiguration,runId);
             }else {
-                res = ExecuteDBSCAN.executeDBSCAN(sc, executionConfiguration, sparkMetricListener);
+                res = ExecuteDBSCAN.executeDBSCAN(sc, executionConfiguration, sparkMetricListener,runId);
             }
-
             System.out.println(res.toString());
-            if (!headerWritten) {
-                out.write(res.printHeader() + "\n");
-                headerWritten = true;
-            }
+            out.write(res.printHeader() + "\n");
             out.write(res.toString() + "\n");
             out.flush();
-
+            out.close();
             sc.stop();
         }
 
-        out.close();
     }
 }

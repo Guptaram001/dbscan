@@ -4,8 +4,7 @@ import org.apache.spark.util.LongAccumulator;
 import java.util.*;
 
 public class Utils {
-    final static float EPS = 1e-6f;
-    public static void localDBSCAN(List<Point> points, float eps2, int minPts,QueryMetrics metrics) {
+    public static void localDBSCAN(List<Point> points, double eps2, int minPts,QueryMetrics metrics) {
 
         //Map<Float, Boolean> visited = new HashMap<>();
         BitSet visited = new BitSet(points.size());
@@ -36,7 +35,7 @@ public class Utils {
     }
 
     public static void expandCluster(KDTree kdTree, Point p, List<Point> neighbors,
-                                     int clusterId, float eps2, int minPts, BitSet visited,
+                                     int clusterId, double eps2, int minPts, BitSet visited,
                                      QueryMetrics metrics) {
         p.clusterId = clusterId;
 
@@ -73,31 +72,31 @@ public class Utils {
 //    }
 
 
-    public static double distanceSquared(Point a, Point b) {
-        double sum = 0.0;
-        for (int i = 0; i < a.dimensions; i++) {
-            double diff = a.coordinates[i] - b.coordinates[i];
-            sum += diff * diff;
-        }
-        return sum;
-    }
+//    public static double distanceSquared(Point a, Point b) {
+//        double sum = 0.0;
+//        for (int i = 0; i < a.dimensions; i++) {
+//            double diff = a.coordinates[i] - b.coordinates[i];
+//            sum += diff * diff;
+//        }
+//        return sum;
+//    }
 
-    public static List<Point> regionQuery(List<Point> points, Point p, float eps2, LongAccumulator queryCount, LongAccumulator queryTime) {
-        long start = System.nanoTime();
-
-        List<Point> neighbors = new ArrayList<>();
-        for (Point q : points) {
-            if (distanceSquared(p, q) <= eps2 +EPS ) {
-                neighbors.add(q);
-            }
-        }
-
-        long end = System.nanoTime();
-        queryTime.add(end - start);
-        queryCount.add(1);
-
-        return neighbors;
-    }
+//    public static List<Point> regionQuery(List<Point> points, Point p, float eps2, LongAccumulator queryCount, LongAccumulator queryTime) {
+//        long start = System.nanoTime();
+//
+//        List<Point> neighbors = new ArrayList<>();
+//        for (Point q : points) {
+//            if (distanceSquared(p, q) <= eps2 ) {
+//                neighbors.add(q);
+//            }
+//        }
+//
+//        long end = System.nanoTime();
+//        queryTime.add(end - start);
+//        queryCount.add(1);
+//
+//        return neighbors;
+//    }
 
 
 }

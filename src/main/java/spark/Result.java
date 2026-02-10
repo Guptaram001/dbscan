@@ -34,7 +34,7 @@ public class Result implements Serializable {
 
     @Override
     public String toString(){
-        return "Result:"+runId+","+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+totalPoints+","
+        return runId+","+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+totalPoints+","
                 +ghostPoints+","+neighborQueryCount+","+shuffleReadMBytes+","+shuffleWriteMBytes
                 +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+dataScale+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints;
     }

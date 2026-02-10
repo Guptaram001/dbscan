@@ -11,10 +11,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class SerialDBSCAN {
-    public static Result executeDBSCAN(ExecutionConfiguration executionConfiguration) throws Exception {
+    public static Result executeDBSCAN(ExecutionConfiguration executionConfiguration, String runId) throws Exception {
 
         Result result = new Result();
-        String runId = String.valueOf(System.currentTimeMillis());
         result.runId=runId;
         result.eps=executionConfiguration.eps;
         result.minPts=executionConfiguration.minPts;
@@ -23,9 +22,12 @@ public class SerialDBSCAN {
         result.mergeStrategy="Serial DBSCAN";
         float eps2=result.eps*result.eps;
         //FileWriter out = new FileWriter("results/results.csv");
-        FileWriter out2 = new FileWriter("results/serialResults.csv");
+        Files.createDirectories(Paths.get("results/SerialDBSCAN_"+runId));
+        FileWriter out = new FileWriter("results/SerialDBSCAN_"+runId+"/part-00000");
 
         String inputPath = executionConfiguration.inputPath;
+        System.out.println("SerialDBSCAN started");
+        System.out.println("Reading input file: " + inputPath);
 
         long startTime = System.currentTimeMillis();
         SerialQueryMetrics metrics = new SerialQueryMetrics();
@@ -41,7 +43,7 @@ public class SerialDBSCAN {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 String[] parts = line.split(",");
-                float[] coords = new float[parts.length];
+                double[] coords = new double[parts.length];
                 for (int i = 0; i < parts.length; i++) {
                     coords[i] = Float.parseFloat(parts[i]);
                 }
@@ -56,12 +58,12 @@ public class SerialDBSCAN {
 
         long writeStart = System.currentTimeMillis();
         for(Point point : pointList) {
-            out2.write(point.toString()+"\n");
+            out.write(point.toString()+"\n");
         }
         long writeEnd = System.currentTimeMillis();
 
-        out2.flush();
-        out2.close();
+        out.flush();
+        out.close();
         long endTime = System.currentTimeMillis();
 
         Set<Integer> clusters = new HashSet<>();

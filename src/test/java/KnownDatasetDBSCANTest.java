@@ -62,8 +62,9 @@ public class KnownDatasetDBSCANTest {
 
         SparkMetricListener metrics = new SparkMetricListener();
         sc.sc().addSparkListener(metrics);
+        String runId = String.valueOf(System.currentTimeMillis());
 
-        Result result = ExecuteDBSCAN.executeDBSCAN(sc, cfg, metrics);
+        Result result = ExecuteDBSCAN.executeDBSCAN(sc, cfg, metrics,runId);
 
 
         assertEquals(37, result.dataScale, "Total points mismatch");

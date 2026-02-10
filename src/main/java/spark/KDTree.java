@@ -5,7 +5,6 @@ import org.apache.spark.util.LongAccumulator;
 import java.util.*;
 
 public class KDTree {
-    final float EPS = 1e-6f;
     static class Node {
         Point point;
         Node left, right;
@@ -44,7 +43,7 @@ public class KDTree {
         return node;
     }
 
-    public List<Point> radiusSearch(Point target, float eps2,QueryMetrics metrics) {
+    public List<Point> radiusSearch(Point target, double eps2,QueryMetrics metrics) {
         long start = System.nanoTime();
 
         List<Point> neighbours = new ArrayList<>();
@@ -55,10 +54,10 @@ public class KDTree {
         return neighbours;
     }
 
-    private void radiusSearch(Node node, Point t, float eps2, List<Point> neighbours) {
+    private void radiusSearch(Node node, Point t, double eps2, List<Point> neighbours) {
         if (node == null) return;
 
-        if (distanceSquared(node.point, t) <= eps2 + EPS) {
+        if (distanceSquared(node.point, t) <= eps2) {
             neighbours.add(node.point);
         }
 
@@ -70,7 +69,7 @@ public class KDTree {
 
         radiusSearch(near, t, eps2, neighbours);
 
-        if (diff * diff <= eps2 + EPS) {
+        if (diff * diff <= eps2 ) {
             radiusSearch(far, t, eps2, neighbours);
         }
     }
@@ -131,17 +130,17 @@ public class KDTree {
     public static void main(String[] args) {
 
         List<Point> points = List.of(
-                new Point(0,new float[]{2, 3},0),
-                new Point(0,new float[]{5, 4},0),
-                new Point(0,new float[]{9, 6},0),
-                new Point(0,new float[]{4, 7},0),
-                new Point(0,new float[]{8, 1},0),
-                new Point(0,new float[]{7, 2},0)
+                new Point(0,new double[]{2.0, 3.0},0),
+                new Point(0,new double[]{5, 4},0),
+                new Point(0,new double[]{9, 6},0),
+                new Point(0,new double[]{4, 7},0),
+                new Point(0,new double[]{8, 1},0),
+                new Point(0,new double[]{7, 2},0)
         );
 
         KDTree tree = new KDTree(points);
 
-        Point query = new Point(0,new float[]{5, 5},0);
+        Point query = new Point(0,new double[]{5, 5},0);
         float eps = 3.0f;
 
         List<Point> neighbors = tree.radiusSearch(query, eps, null);

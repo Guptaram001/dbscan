@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 public class Point implements Serializable {
     long id;
-    float[] coordinates;  // n-dimensional coordinates
+    double[] coordinates;  // n-dimensional coordinates
     int dimensions;  // number of dimensions
     int clusterId;
     boolean isLocalRegion;
@@ -12,7 +12,7 @@ public class Point implements Serializable {
     int cellId;
     int globalClusterId;
 
-    Point(long id, float[] coordinates, int clusterId) {
+    Point(long id, double[] coordinates, int clusterId) {
         this.id = id;
         this.coordinates = coordinates.clone();
         this.dimensions = coordinates.length;
@@ -27,9 +27,9 @@ public class Point implements Serializable {
 //        this.clusterId = clusterId;
 //    }
 
-    public float[] getCoordinates() { return coordinates.clone(); }
+    public double[] getCoordinates() { return coordinates.clone(); }
     public int getDimensions() { return dimensions; }
-    public float getCoordinate(int dim) { return coordinates[dim]; }
+    public double getCoordinate(int dim) { return coordinates[dim]; }
     public int getClusterId() { return clusterId; }
     public boolean isLocalRegion() { return isLocalRegion; }
     public boolean isCorePoint() { return isCorePoint; }

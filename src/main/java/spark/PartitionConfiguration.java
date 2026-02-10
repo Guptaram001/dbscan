@@ -5,16 +5,16 @@ import java.io.Serializable;
 public class PartitionConfiguration implements Serializable {
 
 
-    final float[] minCoords;  // minimum coordinate for each dimension
-    final float[] maxCoords;  // maximum coordinate for each dimension
+    final double[] minCoords;
+    final double[] maxCoords;
     final float cellSize;
     final float buffer;
-    final int[] numCellsPerDim;  // number of cells in each dimension
+    final int[] numCellsPerDim;
     final int dimensions;
-    final long totalCells;  // total number of cells (product of numCellsPerDim)
+    final long totalCells;
 
     // Constructor for n-dimensional data
-    PartitionConfiguration(float[] minCoords, float[] maxCoords, float eps,float cellFactor,float bufferFactor) {
+    PartitionConfiguration(double[] minCoords, double[] maxCoords, float eps,float cellFactor,float bufferFactor) {
         this.dimensions = minCoords.length;
         this.minCoords = minCoords.clone();
         this.maxCoords = maxCoords.clone();
@@ -30,11 +30,6 @@ public class PartitionConfiguration implements Serializable {
         this.totalCells = total;
     }
 
-    // Constructor for backward compatibility (2D)
-    PartitionConfiguration(float minX, float maxX, float minY, float maxY, float eps,float cellFactor,float bufferFactor) {
-        this(new float[]{minX, minY}, new float[]{maxX, maxY}, eps,cellFactor,bufferFactor);
-    }
-
     // Convert n-dimensional cell coordinates to 1D cell ID
     // Uses row-major order: cellId = sum(cellCoords[i] * product(numCellsPerDim[j] for j < i))
     public int cellCoordsToId(int[] cellCoords) {
@@ -48,18 +43,18 @@ public class PartitionConfiguration implements Serializable {
     }
 
     // Convert 1D cell ID to n-dimensional cell coordinates
-    public int[] cellIdToCoords(int cellId) {
-        int[] coords = new int[dimensions];
-        int remaining = cellId;
-        for (int i = dimensions - 1; i >= 0; i--) {
-            coords[i] = remaining % numCellsPerDim[i];
-            remaining /= numCellsPerDim[i];
-        }
-        return coords;
-    }
+//    public int[] cellIdToCoords(int cellId) {
+//        int[] coords = new int[dimensions];
+//        int remaining = cellId;
+//        for (int i = dimensions - 1; i >= 0; i--) {
+//            coords[i] = remaining % numCellsPerDim[i];
+//            remaining /= numCellsPerDim[i];
+//        }
+//        return coords;
+//    }
 
     // Get cell coordinates for a point
-    public int[] getCellCoords(float[] pointCoords) {
+    public int[] getCellCoords(double[] pointCoords) {
         int[] cellCoords = new int[dimensions];
         for (int i = 0; i < dimensions; i++) {
             int coord = (int) Math.floor((pointCoords[i] - minCoords[i]) / cellSize);
@@ -69,8 +64,8 @@ public class PartitionConfiguration implements Serializable {
     }
 
     // Get minimum coordinates of a cell
-    public float[] getCellMinCoords(int[] cellCoords) {
-        float[] minCoords = new float[dimensions];
+    public double[] getCellMinCoords(int[] cellCoords) {
+        double[] minCoords = new double[dimensions];
         for (int i = 0; i < dimensions; i++) {
             minCoords[i] = this.minCoords[i] + cellCoords[i] * cellSize;
         }

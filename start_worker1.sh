@@ -8,8 +8,8 @@ export PATH="$JAVA_HOME/bin:$PATH"
 # Spark cluster configuration
 MASTER_HOST=localhost
 MASTER_PORT=7077
-WORKER_MEMORY=4g
-WORKER_CORES=2
+WORKER_MEMORY=6g
+WORKER_CORES=3
 WORKER_NUM=1
 
 # Find Spark installation directory

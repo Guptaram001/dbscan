@@ -8,16 +8,18 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.util.LongAccumulator;
 import scala.Tuple2;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class ExecuteDBSCAN {
     //Parallel DBSCAN
-    public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener) {
+    public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener,String runId) {
 
         final float EPS = 1e-6f;
 
         Result result = new Result();
-        String runId = String.valueOf(System.currentTimeMillis());
+
         result.runId=runId;
         result.eps = executionConfiguration.eps;
         result.minPts = executionConfiguration.minPts;
@@ -25,8 +27,7 @@ public class ExecuteDBSCAN {
         result.bufferFactor = executionConfiguration.bufferFactor;
         result.mergeStrategy = executionConfiguration.mergeStrategy;
 
-        float eps2 = result.eps * result.eps;
-        float eps = executionConfiguration.eps;
+        double eps2 = result.eps * result.eps;
         boolean DEBUG = executionConfiguration.DEBUG;
         String inputPath = executionConfiguration.inputPath;
 
@@ -55,28 +56,22 @@ public class ExecuteDBSCAN {
         if (DEBUG)
             System.out.println("Detected dimensions: " + dimensions);
 
-<<<<<<< Updated upstream
-        PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude,result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
-        
-=======
-             //Find min/max coordinates of entire dataset
+//        Find min/max coordinates of entire dataset
 //        float minLatitude = points.map(p -> p.latitude).reduce(Float::min);
 //        float maxLatitude = points.map(p -> p.latitude).reduce(Float::max);
 //        float minLongitude = points.map(p -> p.longitude).reduce(Float::min);
 //        float maxLongitude = points.map(p -> p.longitude).reduce(Float::max);
-//
-//        JavaPairRDD<Integer, Point>= new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude,result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
+//        PartitionConfiguration partitionConfiguration = new PartitionConfiguration(minLatitude, maxLatitude, minLongitude, maxLongitude,result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
 
         final int numDimensions = dimensions;
-        float[] minCoords = new float[numDimensions];
-        float[] maxCoords = new float[numDimensions];
+        double[] minCoords = new double[numDimensions];
+        double[] maxCoords = new double[numDimensions];
         for (int dim = 0; dim < numDimensions; dim++) {
             final int d = dim;
-            minCoords[dim] = points.map(p -> p.coordinates[d]).reduce(Float::min);
-            maxCoords[dim] = points.map(p -> p.coordinates[d]).reduce(Float::max);
+            minCoords[dim] = points.map(p -> p.coordinates[d]).mapToDouble(Double::doubleValue).min();
+            maxCoords[dim] = points.map(p -> p.coordinates[d]).mapToDouble(Double::doubleValue).max();
         }
         PartitionConfiguration partitionConfiguration=new PartitionConfiguration(minCoords,maxCoords, result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
->>>>>>> Stashed changes
         final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
         JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points,broadcastPartitionConf,ghostPoints);
         //JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points, minLatitude, minLongitude, broadcastPartitionConf, ghostPoints, EPS);
@@ -94,7 +89,6 @@ public class ExecuteDBSCAN {
             dbscanClusteredAsPerCellsRDD.distinct().coalesce(1).saveAsTextFile("output/dbscan" + runId);
         }
 
-
         JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
                 dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
                         .groupByKey();
@@ -103,7 +97,6 @@ public class ExecuteDBSCAN {
             groupedByPoint.take(200).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
             groupedByPoint.distinct().coalesce(1).saveAsTextFile("output/groupedBy" + runId);
         }
-
 
         JavaPairRDD<String, String> samePointMergeRDD = samePointMerge(groupedByPoint);
         if (DEBUG) {
@@ -158,7 +151,7 @@ public class ExecuteDBSCAN {
 //                                        continue;
 //
 //                                    double dist = Utils.distanceSquared(a, b);
-//                                    if (dist <= eps2 + EPS) {
+//                                    if (dist <= eps2 ) {
 //                                        String keyA = a.cellId + "_" + a.clusterId;
 //                                        String keyB = b.cellId + "_" + b.clusterId;
 //
@@ -185,7 +178,9 @@ public class ExecuteDBSCAN {
             localToGlobal = graphxMerge.merge(samePointMergeRDD, dbscanClusteredAsPerCellsRDD,DEBUG);
         }
 
-        Broadcast<Map<String, Integer>> bcMapToGlobalId = sc.broadcast(localToGlobal.collectAsMap());
+        Map<String, Integer> mutableMap = new HashMap<>(localToGlobal.collectAsMap());
+        Broadcast<Map<String, Integer>> bcMapToGlobalId = sc.broadcast(mutableMap);
+
         JavaPairRDD<Long, Integer> pointToGlobalId = pointToGlobal(groupedByPoint, bcMapToGlobalId);
         if (DEBUG) {
             System.out.println("Point to Global ID Map");
@@ -211,7 +206,7 @@ public class ExecuteDBSCAN {
                         })
                         .filter(p -> p.isLocalRegion);
         long writeStart = System.currentTimeMillis();
-        finalClusters.coalesce(1).saveAsTextFile("output/finalClusters" + runId);
+        finalClusters.coalesce(1).saveAsTextFile("output_"+runId+"/finalClusters");
 
         long writeEnd = System.currentTimeMillis();
         long endTime = System.currentTimeMillis();
@@ -266,7 +261,7 @@ public class ExecuteDBSCAN {
                     long id = tuple._2;
 
                     String[] parts = line.split(",");
-                    float[] coords = new float[parts.length];
+                    double[] coords = new double[parts.length];
                     for (int i = 0; i < parts.length; i++) {
                         coords[i] = Float.parseFloat(parts[i]);
                     }
@@ -328,7 +323,7 @@ public class ExecuteDBSCAN {
     }
 
     public static JavaPairRDD<Integer, Point> dbscanClusteredAsPerCells(JavaPairRDD<Integer, Point> partitionedToCellsRDD,
-                                                                        float eps2, int minPts,QueryMetrics metrics) {
+                                                                        double eps2, int minPts,QueryMetrics metrics) {
         return partitionedToCellsRDD
                 .groupByKey()
                 .flatMapToPair(cell -> {
@@ -338,13 +333,7 @@ public class ExecuteDBSCAN {
                     cell._2.forEach(cellPoints::add);
 
                     // Local DBSCAN inside one cell
-                    Utils.localDBSCAN(
-                            cellPoints,
-                            eps2,
-                            minPts,
-                            metrics
-
-                    );
+                    Utils.localDBSCAN(cellPoints, eps2, minPts, metrics);
 
                     List<Tuple2<Integer, Point>> out = new ArrayList<>();
                     for (Point p : cellPoints) {
@@ -371,15 +360,14 @@ public class ExecuteDBSCAN {
         assignments.add(new Tuple2<>(homeCellId, local));
 
         // Check Boundaries for Neighbor Replication (Ghost Points)
-        float[] cellMinCoords = cfg.getCellMinCoords(homeCellCoords);
-        float[] distancesToMin = new float[cfg.dimensions];
-        float[] distancesToMax = new float[cfg.dimensions];
+        double[] cellMinCoords = cfg.getCellMinCoords(homeCellCoords);
+        double[] distancesToMin = new double[cfg.dimensions];
+        double[] distancesToMax = new double[cfg.dimensions];
 
         for (int dim = 0; dim < cfg.dimensions; dim++) {
             distancesToMin[dim] = p.coordinates[dim] - cellMinCoords[dim];
             distancesToMax[dim] = (cellMinCoords[dim] + cfg.cellSize) - p.coordinates[dim];
         }
-
         generateNeighborCells(cfg, homeCellCoords, distancesToMin, distancesToMax, assignments, p,ghostPoints);
 
         return assignments.iterator();
@@ -485,13 +473,13 @@ public class ExecuteDBSCAN {
     }
 
 
-    private static void generateNeighborCells(PartitionConfiguration cfg, int[] homeCoords, float[] distancesToMin, float[] distancesToMax,
+    private static void generateNeighborCells(PartitionConfiguration cfg, int[] homeCoords, double[] distancesToMin, double[] distancesToMax,
                                               List<Tuple2<Integer, Point>> assignments, Point p,LongAccumulator ghostPoints) {
         int[] offsets = new int[cfg.dimensions];
         generateNeighborCellsRecursive(cfg, homeCoords, offsets, 0, distancesToMin, distancesToMax, assignments, p,ghostPoints);
     }
 
-    private static void generateNeighborCellsRecursive(PartitionConfiguration cfg, int[] homeCoords, int[] offsets, int dim, float[] distancesToMin, float[] distancesToMax,
+    private static void generateNeighborCellsRecursive(PartitionConfiguration cfg, int[] homeCoords, int[] offsets, int dim, double[] distancesToMin, double[] distancesToMax,
                                                        List<Tuple2<Integer, Point>> assignments, Point p, LongAccumulator ghostPoints) {
         if (dim == cfg.dimensions) {
             boolean isHomeCell = true;

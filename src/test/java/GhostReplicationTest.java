@@ -53,8 +53,9 @@ public class GhostReplicationTest {
 
         SparkMetricListener metrics = new SparkMetricListener();
         sc.sc().addSparkListener(metrics);
+        String runId = String.valueOf(System.currentTimeMillis());
 
-        Result res = ExecuteDBSCAN.executeDBSCAN(sc, cfg, metrics);
+        Result res = ExecuteDBSCAN.executeDBSCAN(sc, cfg, metrics,runId);
 
         assertTrue(res.ghostPoints > 0, "Expected some ghost points due to boundary replication");
     }
