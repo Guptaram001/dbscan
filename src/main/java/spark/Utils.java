@@ -1,13 +1,11 @@
 package spark;
 
 import org.apache.spark.util.LongAccumulator;
-import scala.Tuple2;
-
 import java.util.*;
 
 public class Utils {
     final static float EPS = 1e-6f;
-    public static void localDBSCAN(List<Point> points, float eps2, int minPts, LongAccumulator queryCount, LongAccumulator queryTime) {
+    public static void localDBSCAN(List<Point> points, float eps2, int minPts,QueryMetrics metrics) {
 
         //Map<Float, Boolean> visited = new HashMap<>();
         BitSet visited = new BitSet(points.size());
@@ -24,7 +22,7 @@ public class Utils {
 
             visited.set((int)p.id);
             //List<Point> neighbors = regionQuery(points, p, eps, queryCount, queryTime);
-            List<Point> neighbors =kdTree.radiusSearch(p,eps2,queryCount,queryTime);
+            List<Point> neighbors =kdTree.radiusSearch(p,eps2,metrics);
 
             if (neighbors.size() < minPts) {
                 p.clusterId = -1;
@@ -32,14 +30,14 @@ public class Utils {
             } else {
                 p.isCorePoint = true;
                 localClusterId++;
-                expandCluster(kdTree, p, neighbors, localClusterId, eps2, minPts, visited, queryCount, queryTime);
+                expandCluster(kdTree, p, neighbors, localClusterId, eps2, minPts, visited, metrics);
             }
         }
     }
 
     public static void expandCluster(KDTree kdTree, Point p, List<Point> neighbors,
                                      int clusterId, float eps2, int minPts, BitSet visited,
-                                     LongAccumulator queryCount, LongAccumulator queryTime) {
+                                     QueryMetrics metrics) {
         p.clusterId = clusterId;
 
         Queue<Point> seeds = new LinkedList<>(neighbors);
@@ -51,7 +49,7 @@ public class Utils {
                 visited.set((int)q.id);
                 //List<Point> qNeighbors = regionQuery(points, q, eps, queryCount, queryTime);
 
-                List<Point> qNeighbors =kdTree.radiusSearch(q,eps2,queryCount,queryTime);
+                List<Point> qNeighbors =kdTree.radiusSearch(q,eps2,metrics);
                 if (qNeighbors.size() >= minPts) {
                     q.isCorePoint = true;
                     for (Point qn : qNeighbors) {
@@ -68,10 +66,20 @@ public class Utils {
         }
     }
 
-    public static float distance(Point a, Point b) {
-        float dx = a.latitude - b.latitude;
-        float dy = a.longitude - b.longitude;
-        return dx * dx + dy * dy;
+//    public static float distance(Point a, Point b) {
+//        float dx = a.latitude - b.latitude;
+//        float dy = a.longitude - b.longitude;
+//        return dx * dx + dy * dy;
+//    }
+
+
+    public static double distanceSquared(Point a, Point b) {
+        double sum = 0.0;
+        for (int i = 0; i < a.dimensions; i++) {
+            double diff = a.coordinates[i] - b.coordinates[i];
+            sum += diff * diff;
+        }
+        return sum;
     }
 
     public static List<Point> regionQuery(List<Point> points, Point p, float eps2, LongAccumulator queryCount, LongAccumulator queryTime) {
@@ -79,7 +87,7 @@ public class Utils {
 
         List<Point> neighbors = new ArrayList<>();
         for (Point q : points) {
-            if (distance(p, q) <= eps2 +EPS ) {
+            if (distanceSquared(p, q) <= eps2 +EPS ) {
                 neighbors.add(q);
             }
         }

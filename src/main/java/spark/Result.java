@@ -3,12 +3,12 @@ package spark;
 import java.io.Serializable;
 
 public class Result implements Serializable {
+    public String runId;
     public float eps;
     public int minPts;
     public float cellFactor;
     public float bufferFactor;
     public String mergeStrategy;
-    public long runtimeMs;
 
     // ghost metrics
     public long totalPoints;
@@ -18,10 +18,10 @@ public class Result implements Serializable {
     public long neighborQueryCount;
 
     // Spark system metrics
-    public long shuffleReadMBytes;
-    public long shuffleWriteMBytes;
-    public long memorySpilledBytes;
-    public long diskSpilledBytes;
+    public float shuffleReadMBytes;
+    public float shuffleWriteMBytes;
+    public float memorySpilledBytes;
+    public float diskSpilledBytes;
 
     public double neighborhoodTimeSec;  // T1
     public double ioTimeSec;             // T2
@@ -34,13 +34,13 @@ public class Result implements Serializable {
 
     @Override
     public String toString(){
-        return "Result:"+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+runtimeMs+","+totalPoints+","
+        return "Result:"+runId+","+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+totalPoints+","
                 +ghostPoints+","+neighborQueryCount+","+shuffleReadMBytes+","+shuffleWriteMBytes
                 +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+dataScale+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints;
     }
 
     public String printHeader(){
-        return "eps,minPts,cellFactor,bufferFactor,mergeStrategy,runtimeMs,totalPoints,ghostPoints,neighborQueryCount," +
+        return "runId, eps,minPts,cellFactor,bufferFactor,mergeStrategy,totalPoints,ghostPoints,neighborQueryCount," +
                 "shuffleReadMBytes,shuffleWriteMBytes,memorySpilledBytes,diskSpilledBytes,"+
                 "neighborhoodPercent,dataScale,ioTimeSec,totalTimeSec,neighborhoodTimeSec,numClusters,noisePoints";
     }

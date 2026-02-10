@@ -22,17 +22,29 @@ public class EntryPoint {
         List<ExecutionConfiguration> tests = List.of(
                // new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
                  //new ExecutionConfiguration(0.1f, 2, 3, 1,"UF", true,args[0])
-                new ExecutionConfiguration(0.03f, 20, 3, 1,"UF", true,args[0])
+                new ExecutionConfiguration(0.03f, 70, 3, 1,"UF", true,args[0])
 
         );
+        System.out.println("Running " + tests.size() + " tests"+args[0]);
 
+<<<<<<< Updated upstream
         Files.createDirectories(Paths.get("results"));
         FileWriter out = new FileWriter("results/results.csv");
+=======
+        FileWriter out = new FileWriter("results/results.csv", true);
+
+        boolean headerWritten = false;
+>>>>>>> Stashed changes
 
         for (ExecutionConfiguration executionConfiguration : tests) {
 
+//            SparkConf conf = new SparkConf()
+//                    .setAppName("DBSCAN-" + executionConfiguration.formId());
             SparkConf conf = new SparkConf()
-                    .setAppName("DBSCAN-" + executionConfiguration.formId());
+                    .setAppName("DBSCAN-" + executionConfiguration.formId())
+                    .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                    .set("spark.kryo.registrator", "spark.MyRegistrator")
+                    .set("spark.kryo.registrationRequired", "false");
 
             JavaSparkContext sc = new JavaSparkContext(conf);
 
@@ -40,13 +52,16 @@ public class EntryPoint {
             sc.sc().addSparkListener(sparkMetricListener);
 
             if(executionConfiguration.mergeStrategy.equals("SerialDBSCAN")){
-                res = SerialDBSCAN.executeDBSCAN(sc, executionConfiguration, sparkMetricListener);
+                res = SerialDBSCAN.executeDBSCAN( executionConfiguration);
             }else {
                 res = ExecuteDBSCAN.executeDBSCAN(sc, executionConfiguration, sparkMetricListener);
             }
 
             System.out.println(res.toString());
-            out.write(res.printHeader()+ "\n");
+            if (!headerWritten) {
+                out.write(res.printHeader() + "\n");
+                headerWritten = true;
+            }
             out.write(res.toString() + "\n");
             out.flush();
 

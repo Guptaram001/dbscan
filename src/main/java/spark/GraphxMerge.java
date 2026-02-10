@@ -13,7 +13,7 @@ import scala.reflect.ClassTag$;
 import java.util.*;
 
 public class GraphxMerge {
-    public Map<String, Integer> merge(JavaPairRDD<String, String> samePointMergeRDD, JavaPairRDD<Integer, Point> clusteredRDD){
+    public JavaPairRDD<String, Integer> merge(JavaPairRDD<String, String> samePointMergeRDD, JavaPairRDD<Integer, Point> clusteredRDD, boolean DEBUG){
 
         //All local clusters
         JavaRDD<String> allClusters = clusteredRDD.values()
@@ -21,7 +21,8 @@ public class GraphxMerge {
                 .map(p -> p.cellId + "_" + p.clusterId)
                 .distinct()
                 .cache();
-        System.out.println("Total local clusters (vertices): " + allClusters.count());
+        if (DEBUG)
+            System.out.println("Total local clusters (vertices): " + allClusters.count());
 
         //Assign Id to every local cluster label
         JavaPairRDD<String, Long> assignClusterId = allClusters.zipWithIndex()
@@ -32,13 +33,29 @@ public class GraphxMerge {
         JavaRDD<scala.Tuple2<Object, Long>> vertices = assignClusterId
                 .map(t -> new scala.Tuple2<Object, Long>(t._2, t._2));
 
+
+        JavaPairRDD<String, String> undirectedEdges =
+                samePointMergeRDD.mapPartitionsToPair(iter -> {
+
+                    Set<Tuple2<String, String>> local = new HashSet<>();
+
+                    while (iter.hasNext()) {
+                        Tuple2<String, String> e = iter.next();
+
+                        local.add(e);
+                        local.add(new Tuple2<>(e._2, e._1));
+                    }
+
+                    return local.iterator();
+                }).distinct();
+
         // Create the both direction of edges
-        JavaPairRDD<String, String> undirectedEdges = samePointMergeRDD.flatMapToPair(e ->
-                Arrays.asList(
-                        new Tuple2<>(e._1, e._2),
-                        new Tuple2<>(e._2, e._1)
-                ).iterator()
-        ).distinct();
+//        JavaPairRDD<String, String> undirectedEdges = samePointMergeRDD.flatMapToPair(e ->
+//                Arrays.asList(
+//                        new Tuple2<>(e._1, e._2),
+//                        new Tuple2<>(e._2, e._1)
+//                ).iterator()
+//        ).distinct();
 
         // Map src label -> src id
         JavaPairRDD<String, Tuple2<String, Long>> srcWithId = undirectedEdges
@@ -54,7 +71,8 @@ public class GraphxMerge {
                 .join(assignClusterId) // (dstLabel, ((srcLabel, srcId), dstId))
                 .map(t -> new Edge<>(t._2._1._2, t._2._2, 1L))
                 .distinct();
-        System.out.println("Graph edges: " + edges.count());
+        if (DEBUG)
+            System.out.println("Graph edges: " + edges.count());
 
         ClassTag<Long> longTag = ClassTag$.MODULE$.apply(Long.class);
 
@@ -72,8 +90,7 @@ public class GraphxMerge {
 
         // vertexToComponent: (id - componentId)
         JavaPairRDD<Long, Long> idToComp = cc.vertices().toJavaRDD()
-                .mapToPair(t -> new Tuple2<>((Long) t._1, (Long) t._2))
-                .cache();
+                .mapToPair(t -> new Tuple2<>((Long) t._1, (Long) t._2));
 
         // Convert back: (label - componentId)
         JavaPairRDD<Long, String> idToLabel = assignClusterId.mapToPair(t -> new Tuple2<>(t._2, t._1));
@@ -81,8 +98,7 @@ public class GraphxMerge {
         // (id, (label, comp))
         JavaPairRDD<String, Long> labelToComp = idToLabel
                 .join(idToComp)
-                .mapToPair(t -> new Tuple2<>(t._2._1, t._2._2))
-                .cache();
+                .mapToPair(t -> new Tuple2<>(t._2._1, t._2._2));
 
 
         // Assign sequential global IDs to each component
@@ -95,10 +111,8 @@ public class GraphxMerge {
                 .mapToPair(t -> new Tuple2<>(t._2, t._1))   // (comp, label)
                 .join(compToGlobal)    // (comp, (label, gid))
                 .mapToPair(t -> new Tuple2<>(t._2._1, t._2._2));
-        Map<String,Integer> map = new HashMap<>();
-        map=localToGlobal.collectAsMap();
 
-        return map;
+        return localToGlobal;
     }
 }
 

@@ -1,49 +1,58 @@
 package spark;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.util.LongAccumulator;
 
+import java.io.BufferedReader;
 import java.io.FileWriter;
 
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class SerialDBSCAN {
-    public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener) throws Exception {
+    public static Result executeDBSCAN(ExecutionConfiguration executionConfiguration) throws Exception {
 
         Result result = new Result();
+        String runId = String.valueOf(System.currentTimeMillis());
+        result.runId=runId;
         result.eps=executionConfiguration.eps;
         result.minPts=executionConfiguration.minPts;
-        result.cellFactor=executionConfiguration.cellFactor;
-        result.bufferFactor=executionConfiguration.bufferFactor;
-        result.mergeStrategy=executionConfiguration.mergeStrategy;
+        result.cellFactor=0;
+        result.bufferFactor=0;
+        result.mergeStrategy="Serial DBSCAN";
         float eps2=result.eps*result.eps;
-        FileWriter out = new FileWriter("results/results.csv");
+        //FileWriter out = new FileWriter("results/results.csv");
         FileWriter out2 = new FileWriter("results/serialResults.csv");
 
         String inputPath = executionConfiguration.inputPath;
 
-        LongAccumulator neighborQueryCount = sc.sc().longAccumulator("neighborQueryCount");
-        LongAccumulator neighborQueryTimeNs = sc.sc().longAccumulator("neighborQueryTimeNs");
         long startTime = System.currentTimeMillis();
+        SerialQueryMetrics metrics = new SerialQueryMetrics();
 
         //Reads from the file and associates each with a long index as Point(index, lat, long, clusterid =0)
         long readStart = System.currentTimeMillis();
-        JavaRDD<Point> points = sc.textFile(inputPath)
-                .zipWithIndex()
-                .filter(t -> !t._1.trim().isEmpty())
-                .map(t -> {
-                    String[] parts = t._1.trim().split(",");
-                    float x = Float.parseFloat(parts[0]);
-                    float y = Float.parseFloat(parts[1]);
-                    return new Point(t._2, x, y, 0);
-                });
-        List<Point> pointList = points.collect();
+
+        List<Point> pointList = new ArrayList<>();
+        try (BufferedReader br = Files.newBufferedReader(Paths.get(inputPath))) {
+            String line;
+            long id = 0;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                String[] parts = line.split(",");
+                float[] coords = new float[parts.length];
+                for (int i = 0; i < parts.length; i++) {
+                    coords[i] = Float.parseFloat(parts[i]);
+                }
+                pointList.add(new Point(id++, coords, 0));
+            }
+        }
+
         long readEnd = System.currentTimeMillis();
         long totalPoints = pointList.size();
 
-        Utils.localDBSCAN(pointList, eps2, result.minPts, neighborQueryCount, neighborQueryTimeNs);
+        Utils.localDBSCAN(pointList, eps2, result.minPts,metrics);
 
         long writeStart = System.currentTimeMillis();
         for(Point point : pointList) {
@@ -51,20 +60,29 @@ public class SerialDBSCAN {
         }
         long writeEnd = System.currentTimeMillis();
 
-        out.flush();
-        out.close();
         out2.flush();
         out2.close();
-
         long endTime = System.currentTimeMillis();
-        result.runtimeMs = endTime - startTime;
-        result.neighborQueryCount = neighborQueryCount.value();
-        result.shuffleReadMBytes =sparkMetricListener.shuffleRead;
-        result.shuffleWriteMBytes=sparkMetricListener.shuffleWrite;
-        result.diskSpilledBytes=sparkMetricListener.diskSpilled;
-        result.memorySpilledBytes=sparkMetricListener.memorySpilled;
 
-        double T1Sec = neighborQueryTimeNs.value() / 1e9;
+        Set<Integer> clusters = new HashSet<>();
+        int noise = 0;
+        for (Point p : pointList) {
+            if (p.clusterId > 0) {
+                clusters.add(p.clusterId);
+            } else if (p.clusterId == -1) {
+                noise++;
+            }
+        }
+
+        result.numClusters = clusters.size();
+        result.noisePoints = noise;
+        result.neighborQueryCount = metrics.queryCount;
+        result.shuffleReadMBytes =0;
+        result.shuffleWriteMBytes=0;
+        result.diskSpilledBytes=0;
+        result.memorySpilledBytes=0;
+
+        double T1Sec = metrics.queryTime / 1e9;
         double readSec = (readEnd - readStart) / 1000.0;
         double writeSec = (writeEnd - writeStart) / 1000.0;
         double T2Sec = readSec + writeSec;
