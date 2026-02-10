@@ -93,7 +93,7 @@ public class SerialDBSCAN {
 
         result.neighborhoodTimeSec = T1Sec;
         result.ioTimeSec = T2Sec;
-        result.totalTimeSec = totalSec;
+        result.dbscanTimeSec = totalSec;
         result.neighborhoodPercent = ratio;
         return  result;
     }

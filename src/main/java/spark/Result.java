@@ -25,7 +25,7 @@ public class Result implements Serializable {
 
     public double neighborhoodTimeSec;  // T1
     public double ioTimeSec;             // T2
-    public double totalTimeSec;          // Ts
+    public double dbscanTimeSec;          // Ts
     public double neighborhoodPercent;     // T1 / Ts
     public int numClusters;
     public int noisePoints;
@@ -42,14 +42,14 @@ public class Result implements Serializable {
     public String toString(){
         return runId+","+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+totalPoints+","
                 +ghostPoints+","+neighborQueryCount+","+shuffleReadMBytes+","+shuffleWriteMBytes
-                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints
+                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+ioTimeSec+","+dbscanTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints
                 +","+dataset+","+totalWorkerMemory+","+noWorkerCores+","+noWorkers+","+driverMemory+","+driverCores;
     }
 
     public String printHeader(){
         return "runId, eps,minPts,cellFactor,bufferFactor,mergeStrategy,totalPoints,ghostPoints,neighborQueryCount," +
                 "shuffleReadMBytes,shuffleWriteMBytes,memorySpilledBytes,diskSpilledBytes,"+
-                "neighborhoodPercent,ioTimeSec,totalTimeSec,neighborhoodTimeSec,numClusters,noisePoints"+
+                "neighborhoodPercent,ioTimeSec,dbscanTimeSec,neighborhoodTimeSec,numClusters,noisePoints"+
                 "dataset,totalWorkerMemory,noWorkerCores,noWorkers,driverMemory,driverCores";
     }
 }

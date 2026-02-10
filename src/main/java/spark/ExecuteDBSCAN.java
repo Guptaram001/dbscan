@@ -16,7 +16,6 @@ public class ExecuteDBSCAN {
     //Parallel DBSCAN
     public static Result executeDBSCAN(JavaSparkContext sc, ExecutionConfiguration executionConfiguration, SparkMetricListener sparkMetricListener,String runId) {
 
-        final float EPS = 1e-6f;
 
         Result result = new Result();
 
@@ -37,7 +36,6 @@ public class ExecuteDBSCAN {
         QueryMetrics metrics =new SparkQueryMetrics(neighborQueryCount, neighborQueryTimeNs);
 
         LongAccumulator ghostPoints = sc.sc().longAccumulator("ghostPoints");
-        long startTime = System.currentTimeMillis();
 
         //Reads from the file and associates each with a long index as Point(index, lat, long, clusterid =0)
         long readStart = System.currentTimeMillis();
@@ -46,11 +44,9 @@ public class ExecuteDBSCAN {
         //Point(2, 0.8, 0.9, 0) is the first point in the file
 
         long readEnd = System.currentTimeMillis();
-
         long totalPoints = points.count();
         if (DEBUG)
             System.out.println("Total points: " + totalPoints);
-
 
         String firstLine = sc.textFile(inputPath).filter(line -> !line.trim().isEmpty()).first();
         int dimensions = firstLine.trim().split(",").length;
@@ -74,8 +70,10 @@ public class ExecuteDBSCAN {
         }
         PartitionConfiguration partitionConfiguration=new PartitionConfiguration(minCoords,maxCoords, result.eps, executionConfiguration.cellFactor, executionConfiguration.bufferFactor);
         final Broadcast<PartitionConfiguration> broadcastPartitionConf = sc.broadcast(partitionConfiguration);
+        long startTime = System.currentTimeMillis();
         JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points,broadcastPartitionConf,ghostPoints);
         //JavaPairRDD<Integer, Point> partitionedToCellsRDD=partitionPointsToCells(points, minLatitude, minLongitude, broadcastPartitionConf, ghostPoints, EPS);
+        long endTime = System.currentTimeMillis();
         if (DEBUG) {
             System.out.println("Points Partitioned based on home cell ");
             partitionedToCellsRDD.take(20).forEach(pair -> System.out.println(pair._1() + " " + pair._2()));
@@ -210,7 +208,7 @@ public class ExecuteDBSCAN {
         finalClusters.coalesce(1).saveAsTextFile("output_"+runId+"/finalClusters");
 
         long writeEnd = System.currentTimeMillis();
-        long endTime = System.currentTimeMillis();
+
         result.totalPoints = finalClusters.count();
         result.ghostPoints = ghostPoints.value();
         result.neighborQueryCount = neighborQueryCount.value();
@@ -228,7 +226,7 @@ public class ExecuteDBSCAN {
 
         result.neighborhoodTimeSec = T1Sec;
         result.ioTimeSec = T2Sec;
-        result.totalTimeSec = totalSec;
+        result.dbscanTimeSec = totalSec;
         result.neighborhoodPercent = ratio;
         result.numClusters =(int)localToGlobal.values().distinct().count();
         result.noisePoints = (int) finalClusters.filter(point -> point.clusterId < 0).count();
