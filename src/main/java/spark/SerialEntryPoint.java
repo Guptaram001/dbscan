@@ -14,7 +14,7 @@ public class SerialEntryPoint {
         Result res;
         String mode = args.length > 1 ? args[1] : "Serial";
         List<ExecutionConfiguration> tests = List.of(
-                new ExecutionConfiguration(0.03f, 70, 3, 0.1f,mode, Boolean.parseBoolean(args[7]),args[0])
+                new ExecutionConfiguration(0.03f, 70, 3, 1f,mode, Boolean.parseBoolean(args[7]),args[0])
         );
 
         Files.createDirectories(Paths.get("results"));

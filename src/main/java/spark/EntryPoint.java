@@ -18,7 +18,7 @@ public class EntryPoint {
         List<ExecutionConfiguration> tests = List.of(
                 // new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
                 //new ExecutionConfiguration(0.1f, 2, 3, 1,"UF", true,args[0])
-                new ExecutionConfiguration(0.03f, 50, 3, 0.1f,mode, Boolean.parseBoolean(args[7]),args[0])
+                new ExecutionConfiguration(0.03f, 50, 3, 1f,mode, Boolean.parseBoolean(args[7]),args[0])
 
         );
 

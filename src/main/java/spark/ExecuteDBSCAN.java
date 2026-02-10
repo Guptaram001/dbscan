@@ -86,9 +86,30 @@ public class ExecuteDBSCAN {
             dbscanClusteredAsPerCellsRDD.distinct().coalesce(1).saveAsTextFile("output/dbscan" + runId);
         }
 
-        JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
-                dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
-                        .groupByKey();
+//        JavaPairRDD<Long, Iterable<Point>> groupedByPoint =
+//                dbscanClusteredAsPerCellsRDD.mapToPair(p -> new Tuple2<>(p._2.id, p._2))
+//                        .groupByKey();
+
+        //Optimized - local aggregation and then shuffle partial list
+        JavaPairRDD<Long, List<Point>> groupedByPoint =
+                dbscanClusteredAsPerCellsRDD
+                        .mapToPair(p -> new Tuple2<>(p._2.id, p._2))
+                        .combineByKey(
+                                point -> {
+                                    List<Point> list = new ArrayList<>();
+                                    list.add(point);
+                                    return list;
+                                },
+                                (list, point) -> {
+                                    list.add(point);
+                                    return list;
+                                },
+                                (list1, list2) -> {
+                                    list1.addAll(list2);
+                                    return list1;
+                                }
+                        );
+
         if (DEBUG) {
             System.out.println("Grouped by points by after local DBSCAN executed on each cells to initiate merge ie Same point in multiple cells");
             groupedByPoint.take(200).forEach(pair -> System.out.println(pair._1() + ": " + pair._2()));
@@ -266,7 +287,7 @@ public class ExecuteDBSCAN {
                 });
     }
 
-    public static JavaPairRDD<Long, Integer> pointToGlobal(JavaPairRDD<Long, Iterable<Point>> groupedByPoint, Broadcast<Map<String, Integer>> bcMapToGlobalId) {
+    public static JavaPairRDD<Long, Integer> pointToGlobal(JavaPairRDD<Long, List<Point>> groupedByPoint, Broadcast<Map<String, Integer>> bcMapToGlobalId) {
         return groupedByPoint.mapValues(pts -> {
 
             Integer coreGid = null;
@@ -290,7 +311,7 @@ public class ExecuteDBSCAN {
         });
     }
 
-    public static JavaPairRDD<String, String> samePointMerge(JavaPairRDD<Long, Iterable<Point>> groupedByPoint) {
+    public static JavaPairRDD<String, String> samePointMerge(JavaPairRDD<Long, List<Point>> groupedByPoint) {
         return groupedByPoint.flatMapToPair(entry -> {
 
             List<Point> pts = new ArrayList<>();
@@ -319,27 +340,41 @@ public class ExecuteDBSCAN {
         });
     }
 
-    public static JavaPairRDD<Integer, Point> dbscanClusteredAsPerCells(JavaPairRDD<Integer, Point> partitionedToCellsRDD,
-                                                                        double eps2, int minPts,QueryMetrics metrics) {
+    public static JavaPairRDD<Integer, Point> dbscanClusteredAsPerCells(
+            JavaPairRDD<Integer, Point> partitionedToCellsRDD,
+            double eps2, int minPts, QueryMetrics metrics) {
+
         return partitionedToCellsRDD
-                .groupByKey()
+                .combineByKey(
+                        p -> {
+                            List<Point> list = new ArrayList<>();
+                            list.add(p);
+                            return list;
+                        },
+                        (list, p) -> {
+                            list.add(p);
+                            return list;
+                        },
+                        (list1, list2) -> {
+                            list1.addAll(list2);
+                            return list1;
+                        })
                 .flatMapToPair(cell -> {
 
                     int cellId = cell._1;
-                    List<Point> cellPoints = new ArrayList<>();
-                    cell._2.forEach(cellPoints::add);
+                    List<Point> cellPoints = cell._2;
 
-                    // Local DBSCAN inside one cell
                     Utils.localDBSCAN(cellPoints, eps2, minPts, metrics);
 
                     List<Tuple2<Integer, Point>> out = new ArrayList<>();
-                    for (Point p : cellPoints) {
+                    for (Point p : cellPoints)
                         out.add(new Tuple2<>(cellId, p));
-                    }
+
                     return out.iterator();
-                })
-                .cache();
+                });
     }
+
+
     public static JavaPairRDD<Integer, Point> partitionPointsToCells(JavaRDD<Point> points, Broadcast<PartitionConfiguration> broadcastPartitionConf, LongAccumulator ghostPoints) {
 
     return points.flatMapToPair(p -> {

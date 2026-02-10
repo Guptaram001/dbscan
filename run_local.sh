@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
-INPUT_FILE=${1:-src/main/resources/k10.csv}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/spark_config.sh"
+
+MODE=${1:-Serial}
+INPUT_FILE=${2:-src/main/resources/densired_2_shrink.csv}
+DEBUG=${3:-false}
 
 # Spark 4.x requires Java 17+. Prefer Java 17 for spark-submit.
 JAVA_VERSION=$(java -version 2>&1 | head -1)
@@ -20,14 +25,38 @@ mvn clean package -DskipTests
 #--conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
 #--conf spark.kryo.registrator=spark.MyRegistrator \
 
-spark-submit \
+if [ "$MODE" == "Serial" ]; then
+  echo ""
+  echo "Running SERIAL DBSCAN (pure Java, brute-force neighbor search)"
+  echo ""
+
+_SERIAL_MEMORY=${SERIAL_MEMORY:-$WORKER_MEMORY}
+
+  java \
+    -cp target/TemplateSpark-1.0-SNAPSHOT.jar \
+    spark.SerialEntryPoint \
+    "$INPUT_FILE" "$MODE" "$_SERIAL_MEMORY" "$SERIAL_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+fi
+
+if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
+
+  echo ""
+  echo "Submitting DBSCAN job to cluster at spark"
+  echo ""
+
+  spark-submit \
   --master local[*] \
-  --driver-memory 8g \
-  --conf spark.driver.bindAddress=127.0.0.1 \
-  --conf spark.driver.host=127.0.0.1 \
-  --conf spark.ui.enabled=false \
-  --conf spark.eventLog.enabled=false \
-  --class spark.EntryPoint \
-  target/TemplateSpark-1.0-SNAPSHOT.jar \
-  "$INPUT_FILE"
+    --driver-memory 8g \
+    --conf spark.driver.bindAddress=127.0.0.1 \
+    --conf spark.driver.host=127.0.0.1 \
+    --conf spark.ui.enabled=true \
+    --conf spark.eventLog.enabled=false \
+    --class spark.EntryPoint \
+    target/TemplateSpark-1.0-SNAPSHOT.jar \
+    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+fi
+
+echo ""
+echo "Job completed."
+
 
