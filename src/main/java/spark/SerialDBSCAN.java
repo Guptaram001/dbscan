@@ -19,7 +19,7 @@ public class SerialDBSCAN {
         result.minPts=executionConfiguration.minPts;
         result.cellFactor=0;
         result.bufferFactor=0;
-        result.mergeStrategy="Serial DBSCAN";
+        result.mergeStrategy=executionConfiguration.mergeStrategy;
         float eps2=result.eps*result.eps;
         //FileWriter out = new FileWriter("results/results.csv");
         Files.createDirectories(Paths.get("results/SerialDBSCAN_"+runId));
@@ -95,7 +95,6 @@ public class SerialDBSCAN {
         result.ioTimeSec = T2Sec;
         result.totalTimeSec = totalSec;
         result.neighborhoodPercent = ratio;
-        result.dataScale = totalPoints;
         return  result;
     }
 

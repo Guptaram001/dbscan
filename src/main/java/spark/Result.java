@@ -27,21 +27,29 @@ public class Result implements Serializable {
     public double ioTimeSec;             // T2
     public double totalTimeSec;          // Ts
     public double neighborhoodPercent;     // T1 / Ts
-    public long dataScale;
     public int numClusters;
     public int noisePoints;
+
+    public String dataset;
+    public int totalWorkerMemory;
+    public int noWorkerCores;
+    public int noWorkers;
+    public int driverMemory;
+    public int driverCores;
 
 
     @Override
     public String toString(){
         return runId+","+eps+","+minPts+","+cellFactor+","+bufferFactor+","+mergeStrategy+","+totalPoints+","
                 +ghostPoints+","+neighborQueryCount+","+shuffleReadMBytes+","+shuffleWriteMBytes
-                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+dataScale+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints;
+                +","+memorySpilledBytes+","+diskSpilledBytes+","+neighborhoodPercent+","+ioTimeSec+","+totalTimeSec+","+neighborhoodTimeSec+","+numClusters+","+noisePoints
+                +","+dataset+","+totalWorkerMemory+","+noWorkerCores+","+noWorkers+","+driverMemory+","+driverCores;
     }
 
     public String printHeader(){
         return "runId, eps,minPts,cellFactor,bufferFactor,mergeStrategy,totalPoints,ghostPoints,neighborQueryCount," +
                 "shuffleReadMBytes,shuffleWriteMBytes,memorySpilledBytes,diskSpilledBytes,"+
-                "neighborhoodPercent,dataScale,ioTimeSec,totalTimeSec,neighborhoodTimeSec,numClusters,noisePoints";
+                "neighborhoodPercent,ioTimeSec,totalTimeSec,neighborhoodTimeSec,numClusters,noisePoints"+
+                "dataset,totalWorkerMemory,noWorkerCores,noWorkers,driverMemory,driverCores";
     }
 }

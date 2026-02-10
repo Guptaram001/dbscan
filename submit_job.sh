@@ -10,13 +10,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 #Resource
 CORES=9
-MEMORY=18g
+MEMORY=10g
 
 # Spark cluster configuration
 MASTER_HOST=localhost
 MASTER_PORT=7077
-WORKER_MEMORY=6g
-WORKER_CORES=3
+WORKER_MEMORY=3g
+WORKER_CORES=2
 NUM_WORKERS=3
 DRIVER_MEMORY=1g
 DRIVER_CORES=1
@@ -40,12 +40,12 @@ if [ "$MODE" == "Serial"  ]; then
   echo ""
 
   java \
-    -Xmx$MEMORY \
+    -Xmx$WORKER_MEMORY \
     -XX:+UseG1GC \
-    -Djava.util.concurrent.ForkJoinPool.common.parallelism=$CORES \
+    -Djava.util.concurrent.ForkJoinPool.common.parallelism=$WORKER_CORES \
     -cp target/TemplateSpark-1.0-SNAPSHOT.jar \
     spark.SerialEntryPoint \
-    "$INPUT_FILE" serial
+    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES"
 fi
 
 if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
@@ -69,7 +69,7 @@ if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
       --conf spark.eventLog.dir=/tmp/spark-events \
       --class spark.EntryPoint \
       target/TemplateSpark-1.0-SNAPSHOT.jar \
-      "$INPUT_FILE" parallel
+      "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES"
 
 fi
 

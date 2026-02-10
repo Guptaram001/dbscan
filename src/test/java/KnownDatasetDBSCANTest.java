@@ -67,7 +67,7 @@ public class KnownDatasetDBSCANTest {
         Result result = ExecuteDBSCAN.executeDBSCAN(sc, cfg, metrics,runId);
 
 
-        assertEquals(37, result.dataScale, "Total points mismatch");
+        assertEquals(37, result.totalPoints, "Total points mismatch");
 
         assertEquals(6, result.numClusters,
                 "Expected exactly 6 clusters");

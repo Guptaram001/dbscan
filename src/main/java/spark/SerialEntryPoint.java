@@ -33,6 +33,14 @@ public class SerialEntryPoint {
             try (FileWriter out = new FileWriter(outputPath)) {
                 System.out.println("Calling SerialDBSCAN.executeDBSCAN...");
                 res = SerialDBSCAN.executeDBSCAN(executionConfiguration, runId);
+
+                res.dataset=args[0];
+                res.totalWorkerMemory=Integer.parseInt(args[2].split("g")[0]);
+                res.noWorkerCores=Integer.parseInt(args[3]);
+                res.noWorkers=0;
+                res.driverMemory=0;
+                res.driverCores=0;
+
                 System.out.println("Results generated: " + res.toString());
 
                 out.write(res.printHeader() + "\n");

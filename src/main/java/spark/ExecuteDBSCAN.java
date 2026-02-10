@@ -27,6 +27,7 @@ public class ExecuteDBSCAN {
         result.bufferFactor = executionConfiguration.bufferFactor;
         result.mergeStrategy = executionConfiguration.mergeStrategy;
 
+
         double eps2 = result.eps * result.eps;
         boolean DEBUG = executionConfiguration.DEBUG;
         String inputPath = executionConfiguration.inputPath;
@@ -229,7 +230,6 @@ public class ExecuteDBSCAN {
         result.ioTimeSec = T2Sec;
         result.totalTimeSec = totalSec;
         result.neighborhoodPercent = ratio;
-        result.dataScale = totalPoints;
         result.numClusters =(int)localToGlobal.values().distinct().count();
         result.noisePoints = (int) finalClusters.filter(point -> point.clusterId < 0).count();
 

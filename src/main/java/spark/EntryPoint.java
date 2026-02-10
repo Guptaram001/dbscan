@@ -38,11 +38,14 @@ public class EntryPoint {
             SparkMetricListener sparkMetricListener = new SparkMetricListener();
             sc.sc().addSparkListener(sparkMetricListener);
 
-            if(executionConfiguration.mergeStrategy.equals("Serial")){
-                res = SerialDBSCAN.executeDBSCAN( executionConfiguration,runId);
-            }else {
-                res = ExecuteDBSCAN.executeDBSCAN(sc, executionConfiguration, sparkMetricListener,runId);
-            }
+            res = ExecuteDBSCAN.executeDBSCAN(sc, executionConfiguration, sparkMetricListener,runId);
+            res.dataset=args[0];
+            res.totalWorkerMemory=Integer.parseInt(args[2].split("g")[0]);
+            res.noWorkerCores=Integer.parseInt(args[3]);
+            res.noWorkers=Integer.parseInt(args[4]);
+            res.driverMemory=Integer.parseInt(args[2].split("g")[0]);
+            res.driverCores=Integer.parseInt(args[6]);
+
             System.out.println(res.toString());
             out.write(res.printHeader() + "\n");
             out.write(res.toString() + "\n");
