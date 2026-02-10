@@ -3,6 +3,7 @@ set -e
 
 MODE=${1:-Serial}
 INPUT_FILE=${2:-src/main/resources/densired_2_shrink.csv}
+DEBUG=${3:-false}
 
 # Set JAVA_HOME to Java 17 for Spark 4.1.0 compatibility
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
@@ -45,7 +46,7 @@ if [ "$MODE" == "Serial"  ]; then
     -Djava.util.concurrent.ForkJoinPool.common.parallelism=$WORKER_CORES \
     -cp target/TemplateSpark-1.0-SNAPSHOT.jar \
     spark.SerialEntryPoint \
-    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES"
+    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
 fi
 
 if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
@@ -64,12 +65,12 @@ if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
       --conf spark.cores.max=$CORES \
       --conf spark.driver.bindAddress=127.0.0.1 \
       --conf spark.driver.host=127.0.0.1 \
-      --conf spark.ui.enabled=true \
-      --conf spark.eventLog.enabled=true \
+      --conf spark.ui.enabled=false \
+      --conf spark.eventLog.enabled=false \
       --conf spark.eventLog.dir=/tmp/spark-events \
       --class spark.EntryPoint \
       target/TemplateSpark-1.0-SNAPSHOT.jar \
-      "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES"
+      "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
 
 fi
 
