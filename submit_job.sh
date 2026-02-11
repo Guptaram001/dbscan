@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/spark_config.sh"
 
 MODE=${1:-Serial}
-INPUT_FILE=${2:-src/main/resources/densired_2_shrink.csv}
+INPUT_FILE=${2:-src/main/resources/densired_2.csv}
 DEBUG=${3:-false}
 
 # Set JAVA_HOME to Java 17 for Spark 4.1.0 compatibility
