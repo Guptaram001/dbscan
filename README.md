@@ -1,4 +1,4 @@
-# Group 1 Parallel DBSCAN with Apache Spark
+# Parallel DBSCAN with Apache Spark
 
 A distributed DBSCAN (Density-Based Spatial Clustering of Applications with Noise) implementation built on Apache Spark. The algorithm uses spatial grid partitioning, local DBSCAN per cell, and merge clusters across cell boundaries.
 
