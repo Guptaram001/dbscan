@@ -50,24 +50,26 @@ Example:
 
 ## Invocation
 
-The scripts accept three arguments:
-1. **MODE** (optional, default: `Serial`) – Execution mode: `Serial`, `UF`, or `GraphX`
-2. **INPUT_FILE** (optional, default varies by script) – Path to input CSV file
-3. **DEBUG** (optional, default: `false`) – Enable debug output
+The main scripts accept the following arguments:
+1. **eps** – Maximum neighbor distance (optional, default: `0.03`)
+2. **minPts** – Minimum neighbors to form a core point (optional, default: `50` for parallel, `70` defaulted internally for serial if not provided)
+3. **MODE** – Execution mode: `Serial`, `UF`, or `GraphX` (optional, default: `Serial`)
+4. **INPUT_FILE** – Path to input CSV file (optional, default varies by script)
+5. **DEBUG** – Enable debug output: `true` or `false` (optional, default: `false`)
 
 ### Option 1: Local Mode (single machine)
 
 Runs DBSCAN locally without a Spark cluster:
 
 ```bash
-# Serial mode (default)
-./run_local.sh Serial src/main/resources/densired_2_shrink.csv false
+# Serial mode (no cluster needed) - Serial execution (eps=0.03, minPts=70)
+./run_local.sh 0.03 70 Serial src/main/resources/densired_2_shrink.csv false
 
-# Or with UF merge strategy
-./run_local.sh UF src/main/resources/densired_2_shrink.csv false
+# Local mode with UF merge strategy (eps=0.03, minPts=50)
+./run_local.sh 0.03 50 UF src/main/resources/densired_2_shrink.csv false
 
-# Or with GraphX merge strategy
-./run_local.sh GraphX src/main/resources/densired_2_shrink.csv false
+# Local mode with GraphX merge strategy (eps=0.03, minPts=50)
+./run_local.sh 0.03 50 GraphX src/main/resources/densired_2_shrink.csv false
 ```
 
 ### Option 2: Spark Cluster Mode
@@ -96,25 +98,25 @@ Each worker listens on ports 8081, 8082, 8083 respectively.
 **3. Submit the DBSCAN Job**
 
 ```bash
-# Serial mode
-./submit_job.sh Serial src/main/resources/densired_2.csv false
+# Serial mode (parameters still consumed but only Serial execution is used)
+./submit_job.sh 0.03 70 Serial src/main/resources/densired_2.csv false
 
 # UF merge strategy
-./submit_job.sh UF src/main/resources/densired_2.csv false
+./submit_job.sh 0.03 50 UF src/main/resources/densired_2.csv false
 
 # GraphX merge strategy
-./submit_job.sh GraphX src/main/resources/densired_2.csv false
+./submit_job.sh 0.03 50 GraphX src/main/resources/densired_2.csv false
 ```
 
 ## Changing the Dataset
 
-To use a different dataset, pass the file path as the second argument:
+To use a different dataset, pass the file path as the fourth argument:
 
 ```bash
-./submit_job.sh UF /path/to/your/data.csv false
+./submit_job.sh 0.03 50 UF /path/to/your/data.csv false
 ```
 
-**Default datasets:**
+**Default datasets (when INPUT_FILE is omitted):**
 - `run_local.sh` defaults to `src/main/resources/densired_2_shrink.csv`
 - `submit_job.sh` defaults to `src/main/resources/densired_2.csv`
 
@@ -130,10 +132,10 @@ End-to-end demo with a sample dataset:
 
 ```bash
 # Local mode (no cluster needed) - Serial execution
-./run_local.sh Serial src/main/resources/densired_2_shrink.csv false
+./run_local.sh 0.03 70 Serial src/main/resources/densired_2_shrink.csv false
 
 # Local mode with UF merge strategy
-./run_local.sh UF src/main/resources/densired_2_shrink.csv false
+./run_local.sh 0.03 50 UF src/main/resources/densired_2_shrink.csv false
 ```
 
 Or with the cluster:
@@ -146,7 +148,7 @@ Or with the cluster:
 ./start_worker1.sh
 
 # Terminal 3: submit job with UF merge strategy
-./submit_job.sh UF src/main/resources/densired_2.csv false
+./submit_job.sh 0.03 50 UF src/main/resources/densired_2.csv false
 ```
 
 ## Output
@@ -159,11 +161,37 @@ Results are written to timestamped directories under `results/`:
 
 ## Configuration
 
+### DBSCAN Parameters
+
 DBSCAN parameters are set in `EntryPoint.java` via `ExecutionConfiguration`:
 - `eps` – Maximum distance (epsilon) for neighbors
 - `minPts` – Minimum neighbors to form a core point
 - `cellFactor`, `bufferFactor` – Grid partitioning settings
 - `mergeStrategy` – `"UF"` (Union-Find) or `"GraphX"`
+
+### Spark Cluster Configuration
+
+Spark cluster settings are configured in `spark_config.sh`, which is shared by all cluster scripts (`start_master.sh`, `start_worker*.sh`, `submit_job.sh`). Edit this file to adjust cluster resources:
+
+**Master Configuration:**
+- `MASTER_HOST` – Master hostname (default: `localhost`)
+- `MASTER_PORT` – Master port (default: `7077`)
+
+**Worker Configuration:**
+- `WORKER_MEMORY` – Memory per worker (default: `4g`)
+- `WORKER_CORES` – CPU cores per worker (default: `3`)
+- `NUM_WORKERS` – Number of workers (default: `1`)
+- `SPARK_DEFAULT_PARALLELISM_FACTOR` – Parallelism multiplier (default: `2`)
+
+**Driver Configuration:**
+- `DRIVER_MEMORY` – Driver memory (default: `4g`). Use 4g+ for large datasets (e.g., 10M points) when using UF/GraphX merge strategies
+- `DRIVER_CORES` – Driver CPU cores (default: `2`)
+
+**Serial Run Configuration:**
+- `SERIAL_MEMORY` – Memory for serial (non-Spark) execution (default: `2g`)
+- `SERIAL_CORES` – CPU cores for serial execution (default: `2`)
+
+**Note:** The total executor cores are automatically calculated as `NUM_WORKERS * WORKER_CORES`.
 
 ## Project Structure
 

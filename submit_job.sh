@@ -5,9 +5,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Load shared cluster config (same as workers)
 source "$SCRIPT_DIR/spark_config.sh"
 
-MODE=${1:-Serial}
-INPUT_FILE=${2:-src/main/resources/densired_2.csv}
-DEBUG=${3:-false}
+# Arguments:
+#   $1 = eps       (optional, default: 0.03)
+#   $2 = minPts    (optional, default: 50)
+#   $3 = MODE      (optional, default: Serial) – Serial | UF | GraphX
+#   $4 = INPUT_FILE (optional, default: src/main/resources/densired_2.csv)
+#   $5 = DEBUG     (optional, default: false)
+EPS=${1:-0.03}
+MINPTS=${2:-50}
+MODE=${3:-Serial}
+INPUT_FILE=${4:-src/main/resources/densired_2.csv}
+DEBUG=${5:-false}
 
 # Set JAVA_HOME to Java 17 for Spark 4.1.0 compatibility
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
@@ -18,6 +26,7 @@ CORES=${TOTAL_EXECUTOR_CORES:-$((NUM_WORKERS * WORKER_CORES))}
 
 echo "Mode: $MODE"
 echo "Input: $INPUT_FILE"
+echo "eps: $EPS, minPts: $MINPTS"
 if [ "$MODE" == "Serial" ]; then
   echo "Serial cores: $SERIAL_CORES, memory: ${SERIAL_MEMORY:-$WORKER_MEMORY}"
 else
@@ -45,7 +54,7 @@ if [ "$MODE" == "Serial" ]; then
     -Djava.util.concurrent.ForkJoinPool.common.parallelism=$SERIAL_CORES \
     -cp target/TemplateSpark-1.0-SNAPSHOT.jar \
     spark.SerialEntryPoint \
-    "$INPUT_FILE" "$MODE" "$_SERIAL_MEMORY" "$SERIAL_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+    "$INPUT_FILE" "$MODE" "$_SERIAL_MEMORY" "$SERIAL_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG" "$EPS" "$MINPTS"
 fi
 
 if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
@@ -70,7 +79,7 @@ if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
       --conf spark.eventLog.dir=/tmp/spark-events \
       --class spark.EntryPoint \
       target/TemplateSpark-1.0-SNAPSHOT.jar \
-      "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+      "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG" "$EPS" "$MINPTS"
 
 fi
 

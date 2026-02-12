@@ -4,9 +4,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/spark_config.sh"
 
-MODE=${1:-Serial}
-INPUT_FILE=${2:-src/main/resources/densired_2_shrink.csv}
-DEBUG=${3:-false}
+# Arguments:
+#   $1 = eps       (optional, default: 0.03)
+#   $2 = minPts    (optional, default: 50)
+#   $3 = MODE      (optional, default: Serial) – Serial | UF | GraphX
+#   $4 = INPUT_FILE (optional, default: src/main/resources/densired_2_shrink.csv)
+#   $5 = DEBUG     (optional, default: false)
+EPS=${1:-0.03}
+MINPTS=${2:-50}
+MODE=${3:-Serial}
+INPUT_FILE=${4:-src/main/resources/densired_2_shrink.csv}
+DEBUG=${5:-false}
 
 # Spark 4.x requires Java 17+. Prefer Java 17 for spark-submit.
 JAVA_VERSION=$(java -version 2>&1 | head -1)
@@ -35,7 +43,7 @@ _SERIAL_MEMORY=${SERIAL_MEMORY:-$WORKER_MEMORY}
   java \
     -cp target/TemplateSpark-1.0-SNAPSHOT.jar \
     spark.SerialEntryPoint \
-    "$INPUT_FILE" "$MODE" "$_SERIAL_MEMORY" "$SERIAL_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+    "$INPUT_FILE" "$MODE" "$_SERIAL_MEMORY" "$SERIAL_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG" "$EPS" "$MINPTS"
 fi
 
 if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
@@ -53,7 +61,7 @@ if [[ "$MODE" == "UF" || "$MODE" == "GraphX" ]]; then
     --conf spark.eventLog.enabled=false \
     --class spark.EntryPoint \
     target/TemplateSpark-1.0-SNAPSHOT.jar \
-    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG"
+    "$INPUT_FILE" "$MODE" "$WORKER_MEMORY" "$WORKER_CORES" "$NUM_WORKERS" "$DRIVER_MEMORY" "$DRIVER_CORES" "$DEBUG" "$EPS" "$MINPTS"
 fi
 
 echo ""

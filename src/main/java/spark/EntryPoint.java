@@ -15,11 +15,32 @@ public class EntryPoint {
         Result res;
         String mode = args.length > 1 ? args[1] : "Serial";
 
-        List<ExecutionConfiguration> tests = List.of(
-                // new ExecutionConfiguration(0.03f, 50, 3, 1,"UF", true,args[0])
-                //new ExecutionConfiguration(0.1f, 2, 3, 1,"UF", true,args[0])
-                new ExecutionConfiguration(0.03f, 50, 3, 1f,mode, Boolean.parseBoolean(args[7]),args[0])
+        // Optional CLI parameters for DBSCAN:
+        // args[8] = eps, args[9] = minPts (if provided by scripts)
+        float eps = 0.03f;
+        int minPts = 50;
+        if (args.length > 8) {
+            try {
+                eps = Float.parseFloat(args[8]);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        if (args.length > 9) {
+            try {
+                minPts = Integer.parseInt(args[9]);
+            } catch (NumberFormatException ignored) {
+            }
+        }
 
+        List<ExecutionConfiguration> tests = List.of(
+                new ExecutionConfiguration(
+                        eps,
+                        minPts,
+                        3,
+                        1f,
+                        mode,
+                        Boolean.parseBoolean(args[7]),
+                        args[0])
         );
 
         Files.createDirectories(Paths.get("results"));
