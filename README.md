@@ -1,11 +1,11 @@
-# Parallel DBSCAN with Apache Spark
+# Group 1 Parallel DBSCAN with Apache Spark
 
 A distributed DBSCAN (Density-Based Spatial Clustering of Applications with Noise) implementation built on Apache Spark. The algorithm uses spatial grid partitioning, local DBSCAN per cell, and merge clusters across cell boundaries.
 
 ## Dependencies
 
-- **Java 17** – Required for Spark 4.x (or Java 11 if using Spark 3.x)
-- **Apache Spark 4.x** – Distributed computation (e.g. installed via Homebrew: `brew install apache-spark`)
+- **Java 17** – Required (or Java 11 if using Spark 3.x)
+- **Apache Spark 3.5.0** – Distributed computation (e.g. installed via Homebrew: `brew install apache-spark`)
 - **Maven 3.6+** – Build tool
 
 ### Installing Dependencies (macOS)
@@ -41,7 +41,7 @@ Input files must be CSV with two numeric columns per line (no header):
 - Column 1: latitude (x)
 - Column 2: longitude (y)
 
-Example (`src/main/resources/test.csv`):
+Example:
 ```
 0.1,0.1
 0.15,0.15
@@ -50,12 +50,24 @@ Example (`src/main/resources/test.csv`):
 
 ## Invocation
 
+The scripts accept three arguments:
+1. **MODE** (optional, default: `Serial`) – Execution mode: `Serial`, `UF`, or `GraphX`
+2. **INPUT_FILE** (optional, default varies by script) – Path to input CSV file
+3. **DEBUG** (optional, default: `false`) – Enable debug output
+
 ### Option 1: Local Mode (single machine)
 
 Runs DBSCAN locally without a Spark cluster:
 
 ```bash
-./run_local.sh src/main/resources/test.csv
+# Serial mode (default)
+./run_local.sh Serial src/main/resources/densired_2_shrink.csv false
+
+# Or with UF merge strategy
+./run_local.sh UF src/main/resources/densired_2_shrink.csv false
+
+# Or with GraphX merge strategy
+./run_local.sh GraphX src/main/resources/densired_2_shrink.csv false
 ```
 
 ### Option 2: Spark Cluster Mode
@@ -84,31 +96,44 @@ Each worker listens on ports 8081, 8082, 8083 respectively.
 **3. Submit the DBSCAN Job**
 
 ```bash
-./submit_job.sh src/main/resources/test.csv
+# Serial mode
+./submit_job.sh Serial src/main/resources/densired_2.csv false
+
+# UF merge strategy
+./submit_job.sh UF src/main/resources/densired_2.csv false
+
+# GraphX merge strategy
+./submit_job.sh GraphX src/main/resources/densired_2.csv false
 ```
 
 ## Changing the Dataset
 
-To use a different dataset, pass the file path as an argument:
+To use a different dataset, pass the file path as the second argument:
 
 ```bash
-./submit_job.sh /path/to/your/data.csv
+./submit_job.sh UF /path/to/your/data.csv false
 ```
 
-The default dataset (when no argument is given) is `src/main/resources/densired_2_shrink.csv`.
+**Default datasets:**
+- `run_local.sh` defaults to `src/main/resources/densired_2_shrink.csv`
+- `submit_job.sh` defaults to `src/main/resources/densired_2.csv`
 
 **Built-in datasets:**
-- `src/main/resources/test.csv` – small demo
-- `src/main/resources/densired_2_shrink.csv` – default for cluster runs
-- `src/main/resources/densired_2.csv` – full dataset
+- `src/main/resources/densired_2_shrink.csv` – smaller dataset (default for local runs)
+- `src/main/resources/densired_2.csv` – medium dataset (default for cluster runs)
+- `src/main/resources/densired_3.csv` – additional dataset
+- `src/main/resources/geolife_*.csv` – various sizes of Geolife trajectory data
 
 ## Simple Demo
 
-End-to-end demo with the small test dataset:
+End-to-end demo with a sample dataset:
 
 ```bash
-# Local mode (no cluster needed)
-./run_local.sh src/main/resources/test.csv
+# Local mode (no cluster needed) - Serial execution
+./run_local.sh Serial src/main/resources/densired_2_shrink.csv false
+
+# Local mode with UF merge strategy
+./run_local.sh UF src/main/resources/densired_2_shrink.csv false
 ```
 
 Or with the cluster:
@@ -120,14 +145,16 @@ Or with the cluster:
 # Terminal 2: start worker
 ./start_worker1.sh
 
-# Terminal 3: submit job
-./submit_job.sh src/main/resources/test.csv
+# Terminal 3: submit job with UF merge strategy
+./submit_job.sh UF src/main/resources/densired_2.csv false
 ```
 
 ## Output
 
-- **results/results.csv** – Summary metrics (runtime, point count, cluster count, etc.)
-- **results/edgesToGlobal.csv** – Local-to-global cluster ID mapping (when merge strategy is UF)
+Results are written to timestamped directories under `results/`:
+
+- **results/Exec_&lt;runId&gt;/results.txt** – Summary metrics (runtime, point count, cluster count, etc.)
+- **results/Exec_&lt;runId&gt;/edgesToGlobal.csv** – Local-to-global cluster ID mapping (when merge strategy is UF)
 - **output/finalClusters&lt;runId&gt;/** – Final clustered points (when DEBUG is enabled)
 
 ## Configuration
@@ -142,13 +169,19 @@ DBSCAN parameters are set in `EntryPoint.java` via `ExecutionConfiguration`:
 
 ```
 src/main/java/spark/
-├── EntryPoint.java         # Main entry, runs DBSCAN with configured experiments
-├── ExecuteDBSCAN.java      # Parallel DBSCAN implementation
-├── SerialDBSCAN.java       # Single-machine reference implementation
-├── UnionFindMerge.java     # Union-Find cluster merge
-├── UnionFindString.java    # Union-Find data structure
-├── Utils.java              # Local DBSCAN, KD-Tree, distance helpers
-├── Point.java              # Point representation
+├── EntryPoint.java              # Main entry point for Spark execution
+├── SerialEntryPoint.java        # Entry point for serial (non-Spark) execution
+├── ExecuteDBSCAN.java           # Parallel DBSCAN implementation
+├── SerialDBSCAN.java            # Single-machine reference implementation
+├── ExecutionConfiguration.java  # Configuration class for DBSCAN parameters
+├── PartitionConfiguration.java   # Grid partitioning configuration
+├── UnionFindMerge.java          # Union-Find cluster merge
+├── UnionFindString.java         # Union-Find data structure
+├── GraphxMerge.java             # GraphX-based cluster merge
+├── Utils.java                   # Local DBSCAN, KD-Tree, distance helpers
+├── Point.java                   # Point representation
+├── Result.java                  # Result metrics container
+├── QueryMetrics.java            # Query performance metrics
 └── ...
 ```
 
