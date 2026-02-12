@@ -13,9 +13,11 @@ public class SerialEntryPoint {
         System.out.println("Args length = " + args.length);
         Result res;
         String mode = args.length > 1 ? args[1] : "Serial";
+        System.out.println(args[0]+args[1]+args[2]+args[3]+args[4]+args[5]+args[6]+args[7]+args[8]+args[9]);
         List<ExecutionConfiguration> tests = List.of(
-                new ExecutionConfiguration(0.03f, 70, 3, 1f,mode, Boolean.parseBoolean(args[7]),args[0])
+                new ExecutionConfiguration(Float.parseFloat(args[8]), Integer.parseInt(args[9]), 3, 1f,mode, Boolean.parseBoolean(args[7]),args[0])
         );
+
 
         Files.createDirectories(Paths.get("results"));
         for (ExecutionConfiguration executionConfiguration : tests) {

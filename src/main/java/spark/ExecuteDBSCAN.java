@@ -188,12 +188,12 @@ public class ExecuteDBSCAN {
 
 
         JavaPairRDD<String, Integer> localToGlobal;
-        if (result.mergeStrategy.equals("UF")) {
-            UnionFindMerge unionFindMerge = new UnionFindMerge();
-            localToGlobal = unionFindMerge.merge(sc, samePointMergeRDD, dbscanClusteredAsPerCellsRDD,DEBUG);
-        } else {
+        if (result.mergeStrategy.equals("GraphX")) {
             GraphxMerge graphxMerge = new GraphxMerge();
             localToGlobal = graphxMerge.merge(samePointMergeRDD, dbscanClusteredAsPerCellsRDD,DEBUG);
+        } else {
+            UnionFindMerge unionFindMerge = new UnionFindMerge();
+            localToGlobal = unionFindMerge.merge(sc, samePointMergeRDD, dbscanClusteredAsPerCellsRDD,DEBUG);
         }
 
         Map<String, Integer> mutableMap = new HashMap<>(localToGlobal.collectAsMap());

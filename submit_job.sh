@@ -14,7 +14,7 @@ source "$SCRIPT_DIR/spark_config.sh"
 EPS=${1:-0.03}
 MINPTS=${2:-50}
 MODE=${3:-Serial}
-INPUT_FILE=${4:-src/main/resources/densired_2.csv}
+INPUT_FILE=${4:-src/main/resources/densired_2_shrink.csv}
 DEBUG=${5:-false}
 
 # Set JAVA_HOME to Java 17 for Spark 4.1.0 compatibility

@@ -37,24 +37,33 @@ This produces `target/TemplateSpark-1.0-SNAPSHOT.jar`, which includes your appli
 
 ## Input Format
 
-Input files must be CSV with two numeric columns per line (no header):
-- Column 1: latitude (x)
-- Column 2: longitude (y)
+Input files must be CSV with two or more dimensions numeric columns per line (no header). It has been tested to work on 3D dataset too: 
+- Column 1
+- Column 2
+- Column 3 (When required)
 
-Example:
+
+Sample Example for 2D:
 ```
 0.1,0.1
 0.15,0.15
 0.2,0.2
 ```
 
+Sample Example for 3D:
+```
+0.1,0.1,0.1
+0.15,0.15,0.15
+0.2,0.2,0.2
+```
+
 ## Invocation
 
 The main scripts accept the following arguments:
 1. **eps** – Maximum neighbor distance (optional, default: `0.03`)
-2. **minPts** – Minimum neighbors to form a core point (optional, default: `50` for parallel, `70` defaulted internally for serial if not provided)
+2. **minPts** – Minimum neighbors to form a core point (optional, default: `50`)
 3. **MODE** – Execution mode: `Serial`, `UF`, or `GraphX` (optional, default: `Serial`)
-4. **INPUT_FILE** – Path to input CSV file (optional, default varies by script)
+4. **INPUT_FILE** – Path to input CSV file (optional, default path: src/main/resources/densired_2_shrink.csv)
 5. **DEBUG** – Enable debug output: `true` or `false` (optional, default: `false`)
 
 ### Option 1: Local Mode (single machine)
@@ -68,7 +77,7 @@ Runs DBSCAN locally without a Spark cluster:
 # Local mode with UF merge strategy (eps=0.03, minPts=50)
 ./run_local.sh 0.03 50 UF src/main/resources/densired_2_shrink.csv false
 
-# Local mode with GraphX merge strategy (eps=0.03, minPts=50)
+# Local mode with GraphX merge strategy (eps=0.03, minPts=50) (Not Tested Fully)
 ./run_local.sh 0.03 50 GraphX src/main/resources/densired_2_shrink.csv false
 ```
 
@@ -118,13 +127,7 @@ To use a different dataset, pass the file path as the fourth argument:
 
 **Default datasets (when INPUT_FILE is omitted):**
 - `run_local.sh` defaults to `src/main/resources/densired_2_shrink.csv`
-- `submit_job.sh` defaults to `src/main/resources/densired_2.csv`
-
-**Built-in datasets:**
-- `src/main/resources/densired_2_shrink.csv` – smaller dataset (default for local runs)
-- `src/main/resources/densired_2.csv` – medium dataset (default for cluster runs)
-- `src/main/resources/densired_3.csv` – additional dataset
-- `src/main/resources/geolife_*.csv` – various sizes of Geolife trajectory data
+- `submit_job.sh` defaults to `src/main/resources/densired_2_shrink.csv`
 
 ## Simple Demo
 
@@ -147,26 +150,30 @@ Or with the cluster:
 # Terminal 2: start worker
 ./start_worker1.sh
 
-# Terminal 3: submit job with UF merge strategy
+# Terminal 3: start worker
+./start_worker2.sh
+
+# Terminal 4: submit job with UF merge strategy
 ./submit_job.sh 0.03 50 UF src/main/resources/densired_2.csv false
 ```
 
 ## Output
 
-Results are written to timestamped directories under `results/`:
+Result Metrics are written to timestamped directories under `results/`:
 
-- **results/Exec_&lt;runId&gt;/results.txt** – Summary metrics (runtime, point count, cluster count, etc.)
-- **results/Exec_&lt;runId&gt;/edgesToGlobal.csv** – Local-to-global cluster ID mapping (when merge strategy is UF)
-- **output/finalClusters&lt;runId&gt;/** – Final clustered points (when DEBUG is enabled)
+- **results/Exec_&lt;runId&gt;/results.txt** – Summary metrics (runtime, point count, cluster count, etc.) for both Serial and Parallel Executions.
+- **results/SerialDBSCAN_&lt;runId&gt;/results.txt** – Final clustered results with point details and clustered Id for the serial Execution
+- **output/finalClusters&lt;runId&gt;/** – Final clustered results with point details and clustered Id for the parallel Execution
+- **output/** – All the intermediate output from the parallel execution (when DEBUG is enabled)
 
 ## Configuration
 
 ### DBSCAN Parameters
 
-DBSCAN parameters are set in `EntryPoint.java` via `ExecutionConfiguration`:
-- `eps` – Maximum distance (epsilon) for neighbors
-- `minPts` – Minimum neighbors to form a core point
-- `cellFactor`, `bufferFactor` – Grid partitioning settings
+DBSCAN parameters are set in `EntryPoint.java` for parallel runs and `SerialEntryPoint.java` for serial runs via `ExecutionConfiguration`:
+- `eps` – Maximum distance (epsilon) for neighbors, default : 0.03
+- `minPts` – Minimum neighbors to form a core point, detault: 50
+- `cellFactor`, `bufferFactor` – Grid partitioning settings, default: 3 and 1
 - `mergeStrategy` – `"UF"` (Union-Find) or `"GraphX"`
 
 ### Spark Cluster Configuration
